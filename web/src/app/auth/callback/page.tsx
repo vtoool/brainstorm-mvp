@@ -8,7 +8,6 @@ export default function AuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    // supabase-js will read tokens from the URL on the client
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) router.replace("/ideas");
     });

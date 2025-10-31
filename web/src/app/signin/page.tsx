@@ -20,21 +20,18 @@ export default function SignInPage() {
   if (sent) return <p>Check your email for a magic link.</p>;
 
   return (
-    <form onSubmit={sendLink} className="space-y-4">
-      <h1 className="text-2xl font-bold">Sign in</h1>
+    <form onSubmit={sendLink} className="flex gap-2">
       <input
         type="email"
         required
-        placeholder="you@email.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="border px-3 py-2 rounded w-80"
+        placeholder="you@example.com"
+        className="border px-3 py-2 rounded w-72"
       />
-      <div>
-        <button type="submit" className="px-4 py-2 rounded bg-black text-white">
-          Send magic link
-        </button>
-      </div>
+      <button type="submit" className="px-3 py-2 rounded bg-black text-white">
+        Send magic link
+      </button>
     </form>
   );
 }
