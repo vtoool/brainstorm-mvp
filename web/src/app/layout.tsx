@@ -1,5 +1,6 @@
 import "./globals.css";
-import AuthStatus from "@/components/AuthStatus";
+import dynamic from "next/dynamic";
+const AuthStatus = dynamic(() => import("@/components/AuthStatus"), { ssr: false });
 export const metadata = { title: "Brainstorm MVP" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
