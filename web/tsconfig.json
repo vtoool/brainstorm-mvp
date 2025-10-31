@@ -5,6 +5,8 @@
     "jsx": "preserve",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "baseUrl": "src",
+    "paths": { "@/*": ["*"] },
     "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -13,6 +15,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": ["next-env.d.ts", "src/**/*"],
   "exclude": ["node_modules"]
 }
