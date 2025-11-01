@@ -21,7 +21,7 @@ type Idea = {
 
 type Feedback = { type: "success" | "error"; message: string };
 
-export default function IdeasPage() {
+export default function GrovePage() {
   const supabase = getSupabaseBrowser();
   const { session, loading } = useAuthSession();
 
@@ -55,7 +55,7 @@ export default function IdeasPage() {
   }, [feedback]);
 
   const ideaCountLabel = useMemo(() => {
-    if (ideas.length === 0) return "No ideas yet";
+    if (ideas.length === 0) return "No seeds yet";
     if (ideas.length === 1) return "1 idea";
     return `${ideas.length} ideas`;
   }, [ideas.length]);
@@ -99,7 +99,7 @@ export default function IdeasPage() {
       }
 
       setIdeas((current) => [data as Idea, ...current.filter((idea) => idea.id !== tempId)]);
-      setFeedback({ type: "success", message: "Idea added!" });
+      setFeedback({ type: "success", message: "Seed planted!" });
     } catch (error) {
       console.error(error);
       setIdeas((current) => current.filter((idea) => idea.id !== tempId));
@@ -112,7 +112,7 @@ export default function IdeasPage() {
   }
 
   async function removeIdea(id: string) {
-    if (!confirm("Delete this idea?")) return;
+    if (!confirm("Clear this idea from your grove?")) return;
 
     const previous = ideas;
     setIdeas((current) => current.filter((idea) => idea.id !== id));
@@ -144,8 +144,8 @@ export default function IdeasPage() {
     <main className="space-y-8">
       <section className="card space-y-5">
         <div>
-          <h1 className="text-xl font-semibold">Add a new idea</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">Capture a spark and iterate fast.</p>
+          <h1 className="text-xl font-semibold">Plant a new idea</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">Capture a spark and give it room to grow.</p>
         </div>
         <form onSubmit={addIdea} className="space-y-4">
           <div className="space-y-2">
@@ -174,9 +174,9 @@ export default function IdeasPage() {
             />
           </div>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-[var(--muted)]">Ideas are private to you.</p>
+            <p className="text-xs text-[var(--muted)]">Your grove is private to you.</p>
             <Button type="submit" disabled={!title.trim() || isSubmitting}>
-              {isSubmitting ? "Adding…" : "Add Idea"}
+              {isSubmitting ? "Planting…" : "Plant idea"}
             </Button>
           </div>
         </form>
@@ -197,7 +197,7 @@ export default function IdeasPage() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Your ideas</h2>
+          <h2 className="text-lg font-semibold">Your grove</h2>
           <span className="text-sm text-[var(--muted)]">{ideaCountLabel}</span>
         </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -206,7 +206,7 @@ export default function IdeasPage() {
               <IdeaCard title={idea.title} description={idea.description} />
               <div className="absolute right-6 top-6">
                 <Button variant="subtle" onClick={() => removeIdea(idea.id)} className="px-2 py-1 text-xs font-medium">
-                  Delete
+                  Remove
                 </Button>
               </div>
             </div>
@@ -223,7 +223,7 @@ export default function IdeasPage() {
                 <span className="mb-3 text-3xl" aria-hidden="true">
                   💡
                 </span>
-                <p className="text-sm text-[var(--muted)]">No ideas yet—add your first one.</p>
+                <p className="text-sm text-[var(--muted)]">No seeds here yet—plant your first idea.</p>
               </motion.div>
             ) : null}
           </AnimatePresence>

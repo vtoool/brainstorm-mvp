@@ -17,7 +17,10 @@ export default function AuthStatus() {
 
   if (!email) {
     return (
-      <a href="/signin" className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15">
+      <a
+        href="/signin"
+        className="rounded-full border border-[color-mix(in_oklab,var(--accent)_35%,transparent)] bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] px-3 py-1.5 text-sm font-medium text-[var(--text)] transition hover:bg-[color-mix(in_oklab,var(--accent)_28%,transparent)]"
+      >
         Sign in
       </a>
     );
@@ -29,7 +32,7 @@ export default function AuthStatus() {
     <div className="group relative">
       <button
         type="button"
-        className="flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/15 px-3 py-1.5"
+        className="flex items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--accent)_25%,transparent)] bg-[color-mix(in_oklab,var(--accent)_18%,transparent)] px-3 py-1.5 transition hover:bg-[color-mix(in_oklab,var(--accent)_28%,transparent)]"
         aria-haspopup="menu"
       >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-white text-xs">

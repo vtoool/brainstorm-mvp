@@ -43,8 +43,8 @@ export default function SignInPage() {
     <main className="flex min-h-[60vh] items-center justify-center">
       <section className="card w-full max-w-md space-y-6">
         <div className="space-y-2">
-          <h1 className="text-xl font-semibold">Sign in</h1>
-          <p className="text-sm text-[var(--muted)]">We’ll email you a magic link.</p>
+          <h1 className="text-xl font-semibold">Sign in to Green Needle</h1>
+          <p className="text-sm text-[var(--muted)]">We’ll email you a magic link to tend your grove.</p>
         </div>
 
         {status === "sent" ? (

@@ -4,21 +4,21 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b0b0b;
-  --panel: #111318;
-  --text: #e7e9ee;
-  --muted: #98a2b3;
-  --accent: #7c5cff;
+  --bg: #041914;
+  --panel: #0d2620;
+  --text: #e6f6ef;
+  --muted: #7fb2a0;
+  --accent: #3dd68c;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --bg: #f5f7ff;
+    --bg: #f2fdf7;
     --panel: #ffffff;
-    --text: #12131a;
-    --muted: #667085;
-    --accent: #6b4cff;
+    --text: #102721;
+    --muted: #5a7d70;
+    --accent: #2fbe74;
   }
 }
 

@@ -7,8 +7,8 @@ import { AppHeader } from "@/components/layout/AppHeader";
 const inter = Inter({ subsets: ["latin"], display: "swap", preload: false });
 
 export const metadata: Metadata = {
-  title: "Brainstorm MVP",
-  description: "Swipe, sort, tournament your ideas.",
+  title: "Green Needle",
+  description: "Grow, refine, and cultivate your best ideas.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

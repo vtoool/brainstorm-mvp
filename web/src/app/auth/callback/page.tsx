@@ -9,10 +9,10 @@ export default function AuthCallback() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) router.replace("/ideas");
+      if (data.session) router.replace("/grove");
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) router.replace("/ideas");
+      if (session) router.replace("/grove");
     });
     return () => sub.subscription.unsubscribe();
   }, [router, supabase]);
