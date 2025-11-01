@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { redirect } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -9,60 +10,26 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useAuthSession } from "@/hooks/useAuthSession";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
-type Idea = {
-  id: string;
-  owner: string | null;
-  title: string;
-  description: string | null;
-  created_at: string;
-};
-
-type Feedback = { type: "success" | "error"; message: string };
+import { useIdeas } from "./useIdeas";
 
 export default function IdeasPage() {
-  const supabase = useMemo(() => getSupabaseBrowser(), []);
   const { session, loading } = useAuthSession();
+  const {
+    ideas,
+    isLoading,
+    isAdding,
+    isRefreshing,
+    error,
+    addError,
+    justSaved,
+    addIdeaOptimistic,
+    removeIdea,
+    clearAddError,
+  } = useIdeas();
 
-  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-
-  const userId = session?.user?.id ?? null;
-
-  const fetchIdeas = useCallback(async () => {
-    if (!userId) {
-      setIdeas([]);
-      return;
-    }
-
-    const { data, error } = await supabase.from("ideas").select("*").order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Failed to fetch ideas", {
-        code: error.code,
-        details: error.details,
-        message: error.message,
-        hint: error.hint,
-      });
-      return;
-    }
-
-    setIdeas((data ?? []) as Idea[]);
-  }, [supabase, userId]);
-
-  useEffect(() => {
-    void fetchIdeas();
-  }, [fetchIdeas]);
-
-  useEffect(() => {
-    if (!feedback) return;
-    const timeout = window.setTimeout(() => setFeedback(null), 3000);
-    return () => window.clearTimeout(timeout);
-  }, [feedback]);
 
   const ideaCountLabel = useMemo(() => {
     if (ideas.length === 0) return "No ideas yet";
@@ -70,87 +37,39 @@ export default function IdeasPage() {
     return `${ideas.length} ideas`;
   }, [ideas.length]);
 
-  async function addIdea(event?: React.FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
+  const statusMessage = useMemo(() => {
+    if (isAdding || isRefreshing) {
+      return "Saving…";
+    }
 
-    const trimmedTitle = title.trim();
-    const trimmedDescription = description.trim();
+    if (justSaved) {
+      return "Saved";
+    }
 
-    if (!trimmedTitle) return;
+    return null;
+  }, [isAdding, isRefreshing, justSaved]);
 
-    setIsSubmitting(true);
-    setFeedback(null);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (!title.trim()) {
+      return;
+    }
 
-      if (sessionError) {
-        throw sessionError;
-      }
+    const wasAdded = await addIdeaOptimistic(title, description);
 
-      const user = sessionData.session?.user;
-
-      if (!user) {
-        throw new Error("No active session");
-      }
-
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        { id: user.id, email: user.email ?? null },
-        { onConflict: "id", ignoreDuplicates: false },
-      );
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      const { data, error } = await supabase
-        .from("ideas")
-        .insert({ title: trimmedTitle, description: trimmedDescription ? trimmedDescription : null })
-        .select()
-        .single();
-
-      if (error || !data) {
-        throw error ?? new Error("Failed to insert idea");
-      }
-
+    if (wasAdded) {
       setTitle("");
       setDescription("");
-      setFeedback({ type: "success", message: "Saved" });
-      await fetchIdeas();
-    } catch (error) {
-      if (typeof error === "object" && error !== null) {
-        const { code, details, message, hint } = error as {
-          code?: string;
-          details?: string;
-          message?: string;
-          hint?: string;
-        };
-
-        console.error("Failed to add idea", { code, details, message, hint, error });
-        setFeedback({ type: "error", message: details || message || "Couldn't add idea. Please try again." });
-      } else {
-        console.error("Failed to add idea", error);
-        setFeedback({ type: "error", message: "Couldn't add idea. Please try again." });
-      }
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
-  async function removeIdea(id: string) {
+  async function handleRemove(id: string) {
     if (!confirm("Delete this idea?")) return;
-
-    const previous = ideas;
-    setIdeas((current) => current.filter((idea) => idea.id !== id));
-
-    const { error } = await supabase.from("ideas").delete().eq("id", id);
-
-    if (error) {
-      setIdeas(previous);
-    }
+    await removeIdea(id);
   }
 
-  if (loading) {
+  if (loading || isLoading) {
     return (
       <main className="space-y-6">
         <section className="card space-y-3">
@@ -173,7 +92,7 @@ export default function IdeasPage() {
           <h1 className="text-xl font-semibold">Add a new idea</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Capture a spark and iterate fast.</p>
         </div>
-        <form onSubmit={addIdea} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="idea-title" className="text-sm font-medium text-[var(--muted)]">
               Title
@@ -182,7 +101,12 @@ export default function IdeasPage() {
               id="idea-title"
               placeholder="Short title"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                if (addError) {
+                  clearAddError();
+                }
+              }}
               maxLength={120}
               required
             />
@@ -195,27 +119,37 @@ export default function IdeasPage() {
               id="idea-description"
               placeholder="Add a few details or context"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value);
+                if (addError) {
+                  clearAddError();
+                }
+              }}
               maxLength={500}
             />
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-[var(--muted)]">Ideas are private to you.</p>
-            <Button type="submit" disabled={!title.trim() || isSubmitting}>
-              {isSubmitting ? "Saving…" : "Add Idea"}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+              <span>Ideas are private to you.</span>
+              {statusMessage ? (
+                <span className={statusMessage === "Saved" ? "text-emerald-400" : undefined}>{statusMessage}</span>
+              ) : null}
+            </div>
+            <Button type="submit" disabled={!title.trim() || isAdding}>
+              {isAdding ? "Saving…" : "Add Idea"}
             </Button>
           </div>
         </form>
         <AnimatePresence mode="wait">
-          {feedback ? (
+          {addError ? (
             <motion.p
-              key={`${feedback.type}-${feedback.message}`}
+              key={addError}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className={feedback.type === "success" ? "text-sm text-emerald-400" : "text-sm text-rose-400"}
+              className="text-sm text-rose-400"
             >
-              {feedback.message}
+              {addError}
             </motion.p>
           ) : null}
         </AnimatePresence>
@@ -226,12 +160,17 @@ export default function IdeasPage() {
           <h2 className="text-lg font-semibold">Your ideas</h2>
           <span className="text-sm text-[var(--muted)]">{ideaCountLabel}</span>
         </div>
+        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {ideas.map((idea) => (
             <div key={idea.id} className="relative">
               <IdeaCard title={idea.title} description={idea.description} />
               <div className="absolute right-6 top-6">
-                <Button variant="subtle" onClick={() => removeIdea(idea.id)} className="px-2 py-1 text-xs font-medium">
+                <Button
+                  variant="subtle"
+                  onClick={() => handleRemove(idea.id)}
+                  className="px-2 py-1 text-xs font-medium"
+                >
                   Delete
                 </Button>
               </div>
