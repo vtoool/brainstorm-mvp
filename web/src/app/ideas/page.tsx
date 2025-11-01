@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { redirect } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -22,7 +22,7 @@ type Idea = {
 type Feedback = { type: "success" | "error"; message: string };
 
 export default function IdeasPage() {
-  const supabase = getSupabaseBrowser();
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
   const { session, loading } = useAuthSession();
 
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -33,20 +33,30 @@ export default function IdeasPage() {
 
   const userId = session?.user?.id ?? null;
 
-  useEffect(() => {
+  const fetchIdeas = useCallback(async () => {
     if (!userId) {
       setIdeas([]);
       return;
     }
 
-    const fetchIdeas = async () => {
-      const query = supabase.from("ideas").select("*").order("created_at", { ascending: false });
-      const { data } = await query.eq("owner", userId);
-      setIdeas((data ?? []) as Idea[]);
-    };
+    const { data, error } = await supabase.from("ideas").select("*").order("created_at", { ascending: false });
 
-    void fetchIdeas();
+    if (error) {
+      console.error("Failed to fetch ideas", {
+        code: error.code,
+        details: error.details,
+        message: error.message,
+        hint: error.hint,
+      });
+      return;
+    }
+
+    setIdeas((data ?? []) as Idea[]);
   }, [supabase, userId]);
+
+  useEffect(() => {
+    void fetchIdeas();
+  }, [fetchIdeas]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -63,11 +73,6 @@ export default function IdeasPage() {
   async function addIdea(event?: React.FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
-    if (!userId) {
-      alert("Sign in first");
-      return;
-    }
-
     const trimmedTitle = title.trim();
     const trimmedDescription = description.trim();
 
@@ -76,36 +81,57 @@ export default function IdeasPage() {
     setIsSubmitting(true);
     setFeedback(null);
 
-    const newIdea = { title: trimmedTitle, description: trimmedDescription || null, owner: userId };
-
-    setTitle("");
-    setDescription("");
-
-    const tempId = crypto.randomUUID();
-    const optimistic: Idea = {
-      id: tempId,
-      owner: userId,
-      title: newIdea.title,
-      description: newIdea.description,
-      created_at: new Date().toISOString(),
-    };
-
-    setIdeas((current) => [optimistic, ...current]);
-
     try {
-      const { data, error } = await supabase.from("ideas").insert(newIdea).select("*").single();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      const user = sessionData.session?.user;
+
+      if (!user) {
+        throw new Error("No active session");
+      }
+
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        { id: user.id, email: user.email ?? null },
+        { onConflict: "id", ignoreDuplicates: false },
+      );
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      const { data, error } = await supabase
+        .from("ideas")
+        .insert({ title: trimmedTitle, description: trimmedDescription ? trimmedDescription : null })
+        .select()
+        .single();
+
       if (error || !data) {
         throw error ?? new Error("Failed to insert idea");
       }
 
-      setIdeas((current) => [data as Idea, ...current.filter((idea) => idea.id !== tempId)]);
-      setFeedback({ type: "success", message: "Idea added!" });
+      setTitle("");
+      setDescription("");
+      setFeedback({ type: "success", message: "Saved" });
+      await fetchIdeas();
     } catch (error) {
-      console.error(error);
-      setIdeas((current) => current.filter((idea) => idea.id !== tempId));
-      setTitle(trimmedTitle);
-      setDescription(trimmedDescription);
-      setFeedback({ type: "error", message: "Couldn't add idea. Please try again." });
+      if (typeof error === "object" && error !== null) {
+        const { code, details, message, hint } = error as {
+          code?: string;
+          details?: string;
+          message?: string;
+          hint?: string;
+        };
+
+        console.error("Failed to add idea", { code, details, message, hint, error });
+        setFeedback({ type: "error", message: details || message || "Couldn't add idea. Please try again." });
+      } else {
+        console.error("Failed to add idea", error);
+        setFeedback({ type: "error", message: "Couldn't add idea. Please try again." });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -176,7 +202,7 @@ export default function IdeasPage() {
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-[var(--muted)]">Ideas are private to you.</p>
             <Button type="submit" disabled={!title.trim() || isSubmitting}>
-              {isSubmitting ? "Adding…" : "Add Idea"}
+              {isSubmitting ? "Saving…" : "Add Idea"}
             </Button>
           </div>
         </form>
