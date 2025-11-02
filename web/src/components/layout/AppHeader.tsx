@@ -16,7 +16,7 @@ export function AppHeader() {
           <Link href="/ideas" className="hover:text-[var(--text)]">
             Ideas
           </Link>
-          <Link href="/new" className="hover:text-[var(--text)]">
+          <Link href="/t/new" className="hover:text-[var(--text)]">
             New Tournament
           </Link>
           <AuthStatus />
