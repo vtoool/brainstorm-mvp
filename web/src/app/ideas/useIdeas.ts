@@ -103,10 +103,9 @@ export function useIdeas() {
       setIdeas((current) => [optimisticIdea, ...current]);
 
       try {
-        const created = await dataPort.createIdea({ title: trimmedTitle, description: trimmedDescription });
-        setIdeas((current) => current.map((idea) => (idea.id === tempId ? created : idea)));
+        await dataPort.createIdea({ title: trimmedTitle, description: trimmedDescription });
+        await refresh({ showSavedIndicator: true });
         setIsAdding(false);
-        void refresh({ showSavedIndicator: true });
         return true;
       } catch (unknownError) {
         const message = unknownError instanceof Error ? unknownError.message : "Failed to add idea.";
