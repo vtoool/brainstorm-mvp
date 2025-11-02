@@ -8,6 +8,7 @@ import { IdeaCard } from "@/components/IdeaCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
+import { useAuthSession } from "@/hooks/useAuthSession";
 
 import { useIdeas } from "./useIdeas";
 
@@ -24,6 +25,7 @@ export default function IdeasPage() {
     removeIdea,
     clearAddError,
   } = useIdeas();
+  const { session } = useAuthSession();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -39,7 +41,7 @@ export default function IdeasPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!session || !title.trim()) return;
     const wasAdded = await addIdeaOptimistic(title, description);
     if (wasAdded) {
       setTitle("");
@@ -48,6 +50,7 @@ export default function IdeasPage() {
   }
 
   async function handleRemove(id: string) {
+    if (!session) return;
     if (!confirm("Delete this idea?")) return;
     await removeIdea(id);
   }
@@ -121,7 +124,11 @@ export default function IdeasPage() {
               </AnimatePresence>
             </div>
             <div className="flex items-center gap-3">
-              <Button type="submit" disabled={!title.trim() || isAdding}>
+              <Button
+                type="submit"
+                disabled={!title.trim() || isAdding || !session}
+                title={!session ? "Sign in to add ideas" : undefined}
+              >
                 {isAdding ? "Saving…" : "Add idea"}
               </Button>
             </div>
@@ -163,6 +170,8 @@ export default function IdeasPage() {
                       size="xs"
                       onClick={() => handleRemove(idea.id)}
                       className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                      disabled={!session}
+                      title={!session ? "Sign in to manage ideas" : undefined}
                     >
                       Delete
                     </Button>
