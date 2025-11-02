@@ -13,7 +13,7 @@ import { dataPort } from "@/lib/data";
 const steps = ["Basics", "Select ideas"];
 
 function nextPowerOfTwo(value: number) {
-  if (value <= 2) return 2;
+  if (value <= 4) return 4;
   return Math.pow(2, Math.ceil(Math.log2(value)));
 }
 
@@ -48,10 +48,10 @@ export default function NewTournamentPage() {
     return ideas.filter((idea) => idea.title.toLowerCase().includes(query));
   }, [ideas, search]);
 
-  const recommendedSize = useMemo(() => nextPowerOfTwo(Math.max(selectedIds.length, 2)), [selectedIds.length]);
+  const recommendedSize = useMemo(() => nextPowerOfTwo(Math.max(selectedIds.length, 4)), [selectedIds.length]);
 
   const canProceedFromBasics = name.trim().length > 2;
-  const canProceedFromSelection = selectedIds.length >= 2;
+  const canProceedFromSelection = selectedIds.length >= 4;
 
   function goToStep(step: number) {
     setCurrentStep(Math.min(Math.max(step, 0), steps.length - 1));
@@ -70,8 +70,8 @@ export default function NewTournamentPage() {
       return;
     }
 
-    if (selectedIds.length < 2) {
-      setError("Select at least two ideas to create a tournament.");
+    if (selectedIds.length < 4) {
+      setError("Select at least four ideas to create a tournament.");
       return;
     }
 
@@ -178,13 +178,13 @@ export default function NewTournamentPage() {
               <Input
                 id="size-suggestion"
                 type="number"
-                min={2}
+                min={4}
                 step={2}
                 value={sizeSuggestion}
-                onChange={(event) => setSizeSuggestion(Math.max(2, Number(event.target.value) || 2))}
+                onChange={(event) => setSizeSuggestion(Math.max(4, Number(event.target.value) || 4))}
               />
               <p className="text-xs text-[var(--muted)]">
-                Pick a power of two (4, 8, 16…). We will recommend {recommendedSize} based on your selections.
+                Pick a power of two starting at 4 (4, 8, 16…). We will recommend {recommendedSize} based on your selections.
               </p>
             </div>
           </motion.section>
@@ -265,7 +265,7 @@ export default function NewTournamentPage() {
         <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
           {currentStep === 0 && !canProceedFromBasics ? "Give your tournament a name." : null}
-          {currentStep === 1 && !canProceedFromSelection ? "Select at least two ideas." : null}
+          {currentStep === 1 && !canProceedFromSelection ? "Select at least four ideas." : null}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {currentStep > 0 ? (
