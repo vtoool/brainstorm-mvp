@@ -46,6 +46,7 @@ export default function TournamentDetailPage({ params }: TournamentPageProps) {
     let isMounted = true;
     void (async () => {
       try {
+        setError(null);
         setIsLoading(true);
         const [details, bracket] = await Promise.all([dataPort.getTournament(id), dataPort.getBracket(id)]);
         if (!isMounted) return;
@@ -56,6 +57,7 @@ export default function TournamentDetailPage({ params }: TournamentPageProps) {
         setTournament(details);
         setParticipants(Object.fromEntries(details.participants.map((participant) => [participant.id, participant])));
         setMatches(bracket);
+        setError(null);
       } catch (unknownError) {
         if (!isMounted) return;
         const message = unknownError instanceof Error ? unknownError.message : "Failed to load tournament.";
