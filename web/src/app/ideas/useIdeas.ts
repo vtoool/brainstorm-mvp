@@ -1,20 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PostgrestError } from "@supabase/supabase-js";
 
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
-
-export type Idea = {
-  id: string;
-  title: string;
-  description: string | null;
-  created_at: string;
-};
+import type { Idea } from "@/lib/domain/types";
+import { dataPort } from "@/lib/data";
 
 export function useIdeas() {
-  const supabase = useMemo(() => getSupabaseBrowser(), []);
-
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
@@ -33,33 +24,13 @@ export function useIdeas() {
     setJustSaved(false);
   }, []);
 
-  const fetchIdeas = useCallback(async (): Promise<Idea[]> => {
-    const { data, error: fetchError } = await supabase
-      .from("ideas")
-      .select("id,title,description,created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (fetchError) {
-      throw fetchError;
-    }
-
-    return (data ?? []) as Idea[];
-  }, [supabase]);
-
   const refresh = useCallback(
     async ({ showSavedIndicator = false }: { showSavedIndicator?: boolean } = {}) => {
       setIsRefreshing(true);
-      const shouldLog = process.env.NODE_ENV === "development";
-      if (shouldLog) {
-        console.time("ideas:refresh");
-      }
-
       try {
-        const nextIdeas = await fetchIdeas();
+        const nextIdeas = await dataPort.listIdeas();
         setIdeas(nextIdeas);
         setError(null);
-
         if (showSavedIndicator) {
           clearSavedIndicator();
           setJustSaved(true);
@@ -68,34 +39,28 @@ export function useIdeas() {
             savedTimeoutRef.current = null;
           }, 2000);
         }
-      } catch (refreshError) {
-        const { message } = normalizeError(refreshError);
-        console.error("Failed to refresh ideas", refreshError);
+      } catch (unknownError) {
+        const message = unknownError instanceof Error ? unknownError.message : "Failed to refresh ideas.";
         setError(message);
       } finally {
-        if (shouldLog) {
-          console.timeEnd("ideas:refresh");
-        }
         setIsRefreshing(false);
       }
     },
-    [clearSavedIndicator, fetchIdeas],
+    [clearSavedIndicator],
   );
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
-
     void (async () => {
       try {
-        const nextIdeas = await fetchIdeas();
+        const nextIdeas = await dataPort.listIdeas();
         if (!isActive) return;
         setIdeas(nextIdeas);
         setError(null);
-      } catch (initialError) {
+      } catch (unknownError) {
         if (!isActive) return;
-        const { message } = normalizeError(initialError);
-        console.error("Failed to load ideas", initialError);
+        const message = unknownError instanceof Error ? unknownError.message : "Failed to load ideas.";
         setError(message);
       } finally {
         if (!isActive) return;
@@ -106,7 +71,7 @@ export function useIdeas() {
     return () => {
       isActive = false;
     };
-  }, [fetchIdeas]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -118,7 +83,6 @@ export function useIdeas() {
     async (title: string, description: string): Promise<boolean> => {
       const trimmedTitle = title.trim();
       const trimmedDescription = description.trim();
-
       if (!trimmedTitle) {
         return false;
       }
@@ -128,120 +92,70 @@ export function useIdeas() {
       setIsAdding(true);
 
       const tempId = `temp-${crypto.randomUUID()}`;
-      const tempIdea: Idea = {
+      const now = new Date().toISOString();
+      const optimisticIdea: Idea = {
         id: tempId,
         title: trimmedTitle,
         description: trimmedDescription ? trimmedDescription : null,
-        created_at: new Date().toISOString(),
+        createdAt: now,
       };
 
-      setIdeas((current) => [tempIdea, ...current]);
-
-      const shouldLog = process.env.NODE_ENV === "development";
-      let insertError: PostgrestError | null = null;
+      setIdeas((current) => [optimisticIdea, ...current]);
 
       try {
-        if (shouldLog) {
-          console.time("ideas:insert");
-        }
-        // NOTE: We avoid { returning: 'minimal' } because the project's supabase-js typings
-        // don’t support it. Optimistic UI makes this unnecessary anyway.
-        const { error: supabaseError } = await supabase
-          .from("ideas")
-          .insert({ title: trimmedTitle, description: trimmedDescription ? trimmedDescription : null });
-        insertError = supabaseError;
+        const created = await dataPort.createIdea({ title: trimmedTitle, description: trimmedDescription });
+        setIdeas((current) => current.map((idea) => (idea.id === tempId ? created : idea)));
+        setIsAdding(false);
+        void refresh({ showSavedIndicator: true });
+        return true;
       } catch (unknownError) {
-        const { error: normalizedError } = normalizeError(unknownError);
-        insertError = normalizedError ?? insertError;
-      } finally {
-        if (shouldLog) {
-          console.timeEnd("ideas:insert");
-        }
-      }
-
-      if (insertError) {
+        const message = unknownError instanceof Error ? unknownError.message : "Failed to add idea.";
         setIdeas((current) => current.filter((idea) => idea.id !== tempId));
-        const { message } = normalizeError(insertError);
-        console.error("Failed to add idea", insertError);
-        setAddError(message || "Couldn't add idea. Please try again.");
+        setAddError(message);
         setIsAdding(false);
         return false;
       }
-
-      setIsAdding(false);
-      void refresh({ showSavedIndicator: true });
-      return true;
     },
-    [clearSavedIndicator, refresh, supabase],
+    [clearSavedIndicator, refresh],
   );
 
-  const removeIdea = useCallback(
-    async (id: string): Promise<boolean> => {
-      setError(null);
-      let previousIdeas: Idea[] = [];
-      setIdeas((current) => {
-        previousIdeas = current;
-        return current.filter((idea) => idea.id !== id);
-      });
+  const removeIdea = useCallback(async (id: string) => {
+    setError(null);
+    let previousIdeas: Idea[] = [];
+    setIdeas((current) => {
+      previousIdeas = current;
+      return current.filter((idea) => idea.id !== id);
+    });
 
-      const { error: deleteError } = await supabase.from("ideas").delete().eq("id", id);
-
-      if (deleteError) {
-        setIdeas(previousIdeas);
-        const { message } = normalizeError(deleteError);
-        console.error("Failed to remove idea", deleteError);
-        setError(message);
-        return false;
-      }
-
+    try {
+      await dataPort.deleteIdea(id);
       return true;
-    },
-    [supabase],
+    } catch (unknownError) {
+      const message = unknownError instanceof Error ? unknownError.message : "Failed to delete idea.";
+      setError(message);
+      setIdeas(previousIdeas);
+      return false;
+    }
+  }, []);
+
+  const state = useMemo(
+    () => ({
+      ideas,
+      isLoading,
+      isAdding,
+      isRefreshing,
+      error,
+      addError,
+      justSaved,
+    }),
+    [ideas, isLoading, isAdding, isRefreshing, error, addError, justSaved],
   );
 
   return {
-    ideas,
-    isLoading,
-    isAdding,
-    isRefreshing,
-    error,
-    addError,
-    justSaved,
+    ...state,
     addIdeaOptimistic,
     refresh,
     removeIdea,
     clearAddError: () => setAddError(null),
   } as const;
-}
-
-function normalizeError(error: unknown): { message: string; error: PostgrestError | null } {
-  if (!error) {
-    return { message: "Something went wrong. Please try again.", error: null };
-  }
-
-  if (typeof error === "string") {
-    return { message: error, error: null };
-  }
-
-  if (isPostgrestError(error)) {
-    const message = error.details || error.message || "Something went wrong. Please try again.";
-    return { message, error };
-  }
-
-  if (error instanceof Error) {
-    return { message: error.message, error: null };
-  }
-
-  return { message: "Something went wrong. Please try again.", error: null };
-}
-
-function isPostgrestError(error: unknown): error is PostgrestError {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    "message" in error &&
-    "details" in error &&
-    "hint" in error
-  );
 }

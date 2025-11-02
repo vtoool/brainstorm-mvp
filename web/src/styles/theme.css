@@ -1,0 +1,23 @@
+:root {
+  color-scheme: light;
+  --bg: #f3f7f5;
+  --panel: #ffffff;
+  --card: #f9fbfa;
+  --text: #0f1f17;
+  --muted: #5c6f63;
+  --accent: #36d399;
+  --ring: rgba(54, 211, 153, 0.3);
+  --border: rgba(15, 31, 23, 0.08);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #06130d;
+  --panel: #0d2217;
+  --card: #122b1e;
+  --text: #e8f5ee;
+  --muted: #8ea799;
+  --accent: #3ceaa8;
+  --ring: rgba(60, 234, 168, 0.32);
+  --border: rgba(232, 245, 238, 0.1);
+}
