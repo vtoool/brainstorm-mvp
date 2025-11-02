@@ -17,8 +17,9 @@ const mockPort = getMockDataPort();
 export const dataPort: DataPort = {
   ...mockPort,
   async listIdeas() {
-    const records = await listIdeasRemote();
-    return records.map(mapIdea);
+    const result = await listIdeasRemote();
+    if (!result.ok) throw new Error(result.error);
+    return result.data.map(mapIdea);
   },
   async createIdea(input) {
     const trimmedTitle = input.title.trim();
@@ -28,10 +29,12 @@ export const dataPort: DataPort = {
 
     const trimmedDescription = input.description?.trim() ?? "";
 
-    await createIdeaRemote({
+    const res = await createIdeaRemote({
       title: trimmedTitle,
       description: trimmedDescription ? trimmedDescription : null,
     });
+
+    if (!res.ok) throw new Error(res.error);
 
     return {
       id: crypto.randomUUID(),
@@ -41,6 +44,7 @@ export const dataPort: DataPort = {
     } satisfies Idea;
   },
   async deleteIdea(id) {
-    await deleteIdeaRemote(id);
+    const res = await deleteIdeaRemote(id);
+    if (!res.ok) throw new Error(res.error);
   },
 };
