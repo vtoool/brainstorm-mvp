@@ -3,14 +3,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { Idea, Visibility } from "@/lib/domain/types";
 import { dataPort } from "@/lib/data";
 
-const steps = ["Basics", "Select ideas", "Seeding & confirm"];
+const steps = ["Basics", "Select ideas"];
 
 function nextPowerOfTwo(value: number) {
   if (value <= 2) return 2;
@@ -50,11 +50,6 @@ export default function NewTournamentPage() {
 
   const recommendedSize = useMemo(() => nextPowerOfTwo(Math.max(selectedIds.length, 2)), [selectedIds.length]);
 
-  const selectedIdeas = useMemo(
-    () => selectedIds.map((id) => ideas.find((idea) => idea.id === id)).filter(Boolean) as Idea[],
-    [ideas, selectedIds],
-  );
-
   const canProceedFromBasics = name.trim().length > 2;
   const canProceedFromSelection = selectedIds.length >= 2;
 
@@ -68,25 +63,10 @@ export default function NewTournamentPage() {
     );
   }
 
-  function handleReorder(id: string, direction: "up" | "down") {
-    setSelectedIds((current) => {
-      const index = current.indexOf(id);
-      if (index === -1) return current;
-      const next = [...current];
-      if (direction === "up" && index > 0) {
-        [next[index - 1], next[index]] = [next[index], next[index - 1]];
-      }
-      if (direction === "down" && index < next.length - 1) {
-        [next[index + 1], next[index]] = [next[index], next[index + 1]];
-      }
-      return next;
-    });
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (currentStep < steps.length - 1) {
-      goToStep(currentStep + 1);
+    if (currentStep === 0) {
+      goToStep(1);
       return;
     }
 
@@ -277,73 +257,6 @@ export default function NewTournamentPage() {
             </div>
           </motion.section>
         ) : null}
-
-        {currentStep === 2 ? (
-          <motion.section
-            key="step-3"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="card space-y-6"
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Review & seed</h2>
-                <p className="text-sm text-[var(--muted)]">Order ideas to set their seeds. Higher seeds face lower ones first.</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--muted)]">
-                <p><span className="text-[var(--text)]">{selectedIds.length}</span> participants</p>
-                <p>Target bracket: {sizeSuggestion}</p>
-                <p className="capitalize">Visibility: {visibility}</p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {selectedIdeas.map((idea, index) => (
-                <div
-                  key={idea.id}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-sm font-semibold text-[var(--accent)]">
-                    {index + 1}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-[var(--text)]">{idea.title}</p>
-                    {idea.description ? (
-                      <p className="overflow-hidden text-ellipsis text-xs text-[var(--muted)]" title={idea.description}>
-                        {idea.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => handleReorder(idea.id, "up")}
-                      disabled={index === 0}
-                    >
-                      <ChevronUp className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => handleReorder(idea.id, "down")}
-                      disabled={index === selectedIdeas.length - 1}
-                    >
-                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {selectedIdeas.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-4 py-6 text-center text-sm text-[var(--muted)]">
-                  No ideas selected yet.
-                </p>
-              ) : null}
-            </div>
-          </motion.section>
-        ) : null}
       </AnimatePresence>
 
       {error ? <p className="text-sm text-rose-400">{error}</p> : null}
@@ -360,8 +273,15 @@ export default function NewTournamentPage() {
               Back
             </Button>
           ) : null}
-          <Button type="submit" disabled={isSaving || (currentStep === 0 && !canProceedFromBasics) || (currentStep === 1 && !canProceedFromSelection)}>
-            {currentStep === steps.length - 1 ? (isSaving ? "Creating…" : "Create tournament") : "Next"}
+          <Button
+            type="submit"
+            disabled={
+              isSaving ||
+              (currentStep === 0 && !canProceedFromBasics) ||
+              (currentStep === 1 && !canProceedFromSelection)
+            }
+          >
+            {currentStep === 1 ? (isSaving ? "Creating…" : "Create tournament") : "Next"}
           </Button>
         </div>
       </div>
