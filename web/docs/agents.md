@@ -10,7 +10,8 @@
 Read these before coding:
 1. `docs/agents.md` (this file)
 2. `docs/C4.md`
-3. `docs/SUPABASE_TODO.md`
+3. `docs/CONTEXT_PROTOCOL.md`
+4. `docs/SUPABASE_TODO.md`
 
 ## House style quick hits
 - TypeScript strictness: prefer explicit types, narrow `unknown`, no implicit `any`.
