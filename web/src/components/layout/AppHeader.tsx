@@ -1,10 +1,14 @@
 "use client";
 
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { useAuthSession } from "@/hooks/useAuthSession";
+import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
 const NAV_LINKS = [
   { href: "/ideas", label: "Ideas" },
@@ -14,6 +18,45 @@ const NAV_LINKS = [
 
 export function AppHeader() {
   const pathname = usePathname();
+  const supabase = getSupabaseBrowser();
+  const { session, loading } = useAuthSession();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const email = useMemo(() => {
+    const user = session?.user;
+    if (!user) return null;
+    return (
+      user.email ??
+      (typeof user.user_metadata?.email === "string" ? user.user_metadata.email : null) ??
+      null
+    );
+  }, [session]);
+
+  const initials = useMemo(() => {
+    if (!email) {
+      return "GN";
+    }
+
+    const namePart = email.split("@")[0] ?? "";
+    const segments = namePart.split(/[._-]+/).filter(Boolean);
+    if (segments.length === 0) {
+      return namePart.slice(0, 2).toUpperCase() || "GN";
+    }
+
+    const firstTwo = segments.slice(0, 2).map((segment) => segment.charAt(0));
+    return firstTwo.join("").slice(0, 2).toUpperCase() || "GN";
+  }, [email]);
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Sign out failed", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  }, [supabase]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[color-mix(in_srgb,var(--border)_60%,transparent)] bg-[color-mix(in_srgb,var(--bg)_85%,rgba(6,19,13,0.6))] backdrop-blur">
@@ -53,12 +96,33 @@ export function AppHeader() {
           })}
         </nav>
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm sm:flex">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_80%,black_10%)] text-[var(--bg)] text-xs font-semibold">
-              GN
-            </span>
-            <span>you@greenneedle.app</span>
-          </div>
+          {!loading && session ? (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_80%,black_10%)] text-[var(--bg)] text-xs font-semibold">
+                  {initials}
+                </span>
+                <span className="max-w-[160px] truncate text-[var(--text)]" title={email ?? undefined}>
+                  {email ?? "Signed in"}
+                </span>
+              </div>
+              <Button
+                variant="subtle"
+                size="sm"
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+              >
+                {isSigningOut ? "Signing out…" : "Sign out"}
+              </Button>
+            </div>
+          ) : !loading ? (
+            <Link
+              href="/signin"
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text)] shadow-sm transition-colors hover:border-[color-mix(in_srgb,var(--accent)_35%,transparent)] hover:text-[var(--text)]"
+            >
+              Sign in
+            </Link>
+          ) : null}
           <ThemeToggle />
         </div>
       </div>

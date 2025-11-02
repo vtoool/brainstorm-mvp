@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -14,15 +15,20 @@ export default function SignInPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function sendLink(event: React.FormEvent) {
+  async function sendLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return;
+    }
+
     setStatus("sending");
     setErrorMessage("");
 
     try {
       const origin = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: trimmedEmail,
         options: { emailRedirectTo: `${origin}/auth/callback` },
       });
 
