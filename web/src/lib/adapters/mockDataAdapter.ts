@@ -111,6 +111,12 @@ function nextState(mutator: (draft: PersistedState) => void): PersistedState {
   return draft;
 }
 
+export function syncMockIdeas(ideas: Idea[]) {
+  nextState((draft) => {
+    draft.ideas = ideas.map(cloneIdea);
+  });
+}
+
 function getParticipantsForTournament(state: PersistedState, tournamentId: string) {
   return state.participants.filter((participant) => participant.tournamentId === tournamentId);
 }

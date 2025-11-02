@@ -1,4 +1,4 @@
-import { getMockDataPort } from "@/lib/adapters/mockDataAdapter";
+import { getMockDataPort, syncMockIdeas } from "@/lib/adapters/mockDataAdapter";
 import { createIdea as createIdeaRemote, deleteIdea as deleteIdeaRemote, listIdeas as listIdeasRemote } from "@/lib/adapters/supabaseAdapter.stub";
 import type { Idea } from "@/lib/domain/types";
 import type { DataPort } from "@/lib/ports/DataPort";
@@ -19,7 +19,9 @@ export const dataPort: DataPort = {
   async listIdeas() {
     const result = await listIdeasRemote();
     if (!result.ok) throw new Error(result.error);
-    return result.data.map(mapIdea);
+    const ideas = result.data.map(mapIdea);
+    syncMockIdeas(ideas);
+    return ideas;
   },
   async createIdea(input) {
     const trimmedTitle = input.title.trim();
