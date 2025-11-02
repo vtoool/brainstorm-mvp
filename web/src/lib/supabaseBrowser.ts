@@ -1,8 +1,9 @@
 "use client";
 
 import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-let cachedClient: ReturnType<typeof createClient> | null = null;
+let cachedClient: SupabaseClient | null = null;
 
 export function getSupabaseBrowser() {
   if (cachedClient) {
@@ -26,7 +27,7 @@ export function getSupabaseBrowser() {
         }),
         signOut: async () => ({ error: null }),
       },
-    } as unknown as ReturnType<typeof createClient>;
+    } as unknown as SupabaseClient;
 
     cachedClient = mockClient;
     return mockClient;
