@@ -9,8 +9,14 @@ export function IdeaCard({ title, description }: { title: string; description?: 
       transition={{ type: "spring", stiffness: 350, damping: 30 }}
       className="card"
     >
-      <h3 className="text-base font-semibold leading-6">{title}</h3>
-      {description ? <p className="mt-2 text-sm text-[var(--muted)]">{description}</p> : null}
+      <h3 className="text-base font-semibold leading-6 break-words" title={title}>
+        {title}
+      </h3>
+      {description ? (
+        <p className="mt-2 break-words text-sm text-[var(--muted)]" title={description}>
+          {description}
+        </p>
+      ) : null}
     </motion.article>
   );
 }

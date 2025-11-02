@@ -2,19 +2,16 @@
 
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
-import { redirect } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { IdeaCard } from "@/components/IdeaCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { useAuthSession } from "@/hooks/useAuthSession";
 
 import { useIdeas } from "./useIdeas";
 
 export default function IdeasPage() {
-  const { session, loading } = useAuthSession();
   const {
     ideas,
     isLoading,
@@ -31,33 +28,19 @@ export default function IdeasPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
-  const ideaCountLabel = useMemo(() => {
-    if (ideas.length === 0) return "No ideas yet";
-    if (ideas.length === 1) return "1 idea";
-    return `${ideas.length} ideas`;
-  }, [ideas.length]);
-
   const statusMessage = useMemo(() => {
-    if (isAdding || isRefreshing) {
-      return "Saving…";
-    }
-
-    if (justSaved) {
-      return "Saved";
-    }
-
+    if (isAdding || isRefreshing) return "Saving…";
+    if (justSaved) return "Saved";
     return null;
   }, [isAdding, isRefreshing, justSaved]);
 
+  const displayedIdeas = ideas.slice(0, 100);
+  const hasOverflow = ideas.length > displayedIdeas.length;
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!title.trim()) {
-      return;
-    }
-
+    if (!title.trim()) return;
     const wasAdded = await addIdeaOptimistic(title, description);
-
     if (wasAdded) {
       setTitle("");
       setDescription("");
@@ -69,30 +52,26 @@ export default function IdeasPage() {
     await removeIdea(id);
   }
 
-  if (loading || isLoading) {
+  if (isLoading) {
     return (
-      <main className="space-y-6">
-        <section className="card space-y-3">
-          <div className="h-4 w-32 rounded-full bg-white/10" />
-          <div className="h-10 rounded-xl bg-white/5" />
-          <div className="h-24 rounded-xl bg-white/5" />
-        </section>
-      </main>
+      <section className="space-y-6">
+        <div className="card space-y-4">
+          <div className="h-5 w-48 rounded-full bg-[color-mix(in_srgb,var(--muted)_20%,transparent)]" />
+          <div className="h-12 rounded-2xl bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]" />
+          <div className="h-24 rounded-2xl bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]" />
+        </div>
+      </section>
     );
   }
 
-  if (!session) {
-    redirect("/signin");
-  }
-
   return (
-    <main className="space-y-8">
-      <section className="card space-y-5">
-        <div>
-          <h1 className="text-xl font-semibold">Add a new idea</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">Capture a spark and iterate fast.</p>
+    <div className="space-y-10">
+      <section className="card space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold">Add a new idea</h1>
+          <p className="text-sm text-[var(--muted)]">Capture a spark and iterate fast.</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <label htmlFor="idea-title" className="text-sm font-medium text-[var(--muted)]">
               Title
@@ -103,9 +82,7 @@ export default function IdeasPage() {
               value={title}
               onChange={(event) => {
                 setTitle(event.target.value);
-                if (addError) {
-                  clearAddError();
-                }
+                if (addError) clearAddError();
               }}
               maxLength={120}
               required
@@ -121,32 +98,42 @@ export default function IdeasPage() {
               value={description}
               onChange={(event) => {
                 setDescription(event.target.value);
-                if (addError) {
-                  clearAddError();
-                }
+                if (addError) clearAddError();
               }}
               maxLength={500}
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
               <span>Ideas are private to you.</span>
-              {statusMessage ? (
-                <span className={statusMessage === "Saved" ? "text-emerald-400" : undefined}>{statusMessage}</span>
-              ) : null}
+              <AnimatePresence>
+                {statusMessage ? (
+                  <motion.span
+                    key={statusMessage}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className={statusMessage === "Saved" ? "text-[var(--accent)]" : undefined}
+                  >
+                    {statusMessage}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
             </div>
-            <Button type="submit" disabled={!title.trim() || isAdding}>
-              {isAdding ? "Saving…" : "Add Idea"}
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={!title.trim() || isAdding}>
+                {isAdding ? "Saving…" : "Add idea"}
+              </Button>
+            </div>
           </div>
         </form>
         <AnimatePresence mode="wait">
           {addError ? (
             <motion.p
               key={addError}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
+              exit={{ opacity: 0, y: -8 }}
               className="text-sm text-rose-400"
             >
               {addError}
@@ -155,37 +142,45 @@ export default function IdeasPage() {
         </AnimatePresence>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Your ideas</h2>
-          <span className="text-sm text-[var(--muted)]">{ideaCountLabel}</span>
+      <section className="space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Your ideas</h2>
+            <p className="text-sm text-[var(--muted)]">{ideas.length === 0 ? "No ideas yet." : `${ideas.length} captured.`}</p>
+          </div>
+          {error ? <p className="text-sm text-rose-400">{error}</p> : null}
         </div>
-        {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {ideas.map((idea) => (
-            <div key={idea.id} className="relative">
-              <IdeaCard title={idea.title} description={idea.description} />
-              <div className="absolute right-6 top-6">
-                <Button
-                  variant="subtle"
-                  onClick={() => handleRemove(idea.id)}
-                  className="px-2 py-1 text-xs font-medium"
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-          ))}
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <AnimatePresence initial={false}>
+            {displayedIdeas.map((idea) => (
+              <motion.div key={idea.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                <div className="group relative">
+                  <IdeaCard title={idea.title} description={idea.description} />
+                  <div className="absolute right-5 top-5">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => handleRemove(idea.id)}
+                      className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
           <AnimatePresence>
-            {ideas.length === 0 ? (
+            {ideas.length === 0 && !isLoading ? (
               <motion.div
                 key="empty"
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="col-span-full flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 py-14 text-center"
+                exit={{ opacity: 0, y: -12 }}
+                className="col-span-full flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] py-14 text-center"
               >
-                <span className="mb-3 text-3xl" aria-hidden="true">
+                <span className="mb-3 text-4xl" aria-hidden="true">
                   💡
                 </span>
                 <p className="text-sm text-[var(--muted)]">No ideas yet—add your first one.</p>
@@ -193,7 +188,10 @@ export default function IdeasPage() {
             ) : null}
           </AnimatePresence>
         </div>
+        {hasOverflow ? (
+          <p className="text-xs text-[var(--muted)]">Showing the latest 100 ideas. Narrow your list to see older entries.</p>
+        ) : null}
       </section>
-    </main>
+    </div>
   );
 }
