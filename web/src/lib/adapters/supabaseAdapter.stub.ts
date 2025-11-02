@@ -24,13 +24,7 @@ export async function listIdeas(ownerId?: string) {
     : { ok: true as const, data: (data ?? []) as IdeaRow[] };
 }
 
-export async function createIdea({
-  title,
-  description,
-}: {
-  title: string;
-  description?: string;
-}) {
+export async function createIdea({ title, description }: { title: string; description?: string }) {
   const supabase = getSupabaseBrowser();
 
   // Ensure we have a user so the RLS WITH CHECK passes
@@ -42,9 +36,9 @@ export async function createIdea({
   // Your table has an RLS policy like: WITH CHECK (owner = auth.uid()).
   // Inserting owner: user.id satisfies that policy. If your column default is auth.uid(),
   // you could omit owner entirely—but keeping it explicit avoids ambiguity.
-  const { error } = await supabase
-    .from("ideas")
-    .insert({ title, description: description || null, owner: user.id });
+  // Map undefined -> null for the nullable DB column.
+  const payload = { title, description: description ?? null, owner: user.id };
+  const { error } = await supabase.from("ideas").insert(payload);
 
   return error ? { ok: false as const, error: error.message } : { ok: true as const };
 }

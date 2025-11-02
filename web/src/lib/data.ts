@@ -28,11 +28,12 @@ export const dataPort: DataPort = {
     }
 
     const trimmedDescription = input.description?.trim() ?? "";
-
-    const res = await createIdeaRemote({
-      title: trimmedTitle,
-      description: trimmedDescription ? trimmedDescription : null,
-    });
+    const res = await createIdeaRemote(
+      // Only pass description when it's a non-empty string.
+      trimmedDescription
+        ? { title: trimmedTitle, description: trimmedDescription }
+        : { title: trimmedTitle }
+    );
 
     if (!res.ok) throw new Error(res.error);
 
