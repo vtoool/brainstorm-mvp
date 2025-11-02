@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Copy, RefreshCw } from "lucide-react";
 
@@ -11,12 +11,6 @@ import type { Match, MatchWinnerSide, Participant, TournamentWithDetails } from 
 import { dataPort } from "@/lib/data";
 import { computeOpenMatches, nextRound } from "@/lib/bracket/generate";
 import { useElementSize } from "@/hooks/useElementSize";
-
-type TournamentPageProps = {
-  params: {
-    id: string;
-  };
-};
 
 const statusLabels: Record<TournamentWithDetails["status"], string> = {
   draft: "Draft",
@@ -30,9 +24,10 @@ const statusColors: Record<TournamentWithDetails["status"], string> = {
   complete: "bg-[color-mix(in_srgb,var(--muted)_16%,transparent)] text-[var(--muted)]",
 };
 
-export default function TournamentDetailPage({ params }: TournamentPageProps) {
+export default function TournamentDetailPage() {
   const router = useRouter();
-  const { id } = params;
+  const params = useParams<{ id: string }>();
+  const id = params.id;
   const [tournament, setTournament] = useState<TournamentWithDetails | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [participants, setParticipants] = useState<Record<string, Participant>>({});

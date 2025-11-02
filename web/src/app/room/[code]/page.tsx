@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 
@@ -12,12 +12,6 @@ import { dataPort } from "@/lib/data";
 
 const STORAGE_PREFIX = "green-needle:votes:";
 
-type RoomPageProps = {
-  params: {
-    code: string;
-  };
-};
-
 type VoteStore = Record<string, "a" | "b">;
 
 type RoomMatch = Match & {
@@ -25,9 +19,10 @@ type RoomMatch = Match & {
   participantB: Participant | null;
 };
 
-export default function RoomPage({ params }: RoomPageProps) {
+export default function RoomPage() {
   const router = useRouter();
-  const { code } = params;
+  const params = useParams<{ code: string }>();
+  const code = params.code;
   const [matches, setMatches] = useState<RoomMatch[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
