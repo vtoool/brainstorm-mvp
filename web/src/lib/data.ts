@@ -17,9 +17,11 @@ const mockPort = getMockDataPort();
 export const dataPort: DataPort = {
   ...mockPort,
   async listIdeas() {
-    const result = await listIdeasRemote();
-    if (!result.ok) throw new Error(result.error);
-    return result.data.map(mapIdea);
+    const res = await listIdeasRemote();
+    if (!res.ok) {
+      throw new Error(res.error);
+    }
+    return res.data.map(mapIdea);
   },
   async createIdea(input) {
     const trimmedTitle = input.title.trim();
@@ -29,22 +31,29 @@ export const dataPort: DataPort = {
 
     const trimmedDescription = input.description?.trim() ?? "";
 
-    const res = await createIdeaRemote({
+    const createRes = await createIdeaRemote({
       title: trimmedTitle,
       description: trimmedDescription ? trimmedDescription : null,
     });
 
-    if (!res.ok) throw new Error(res.error);
+    if (!createRes.ok) {
+      throw new Error(createRes.error);
+    }
 
     return {
-      id: crypto.randomUUID(),
+      // optimistic ID fallback for environments without crypto.randomUUID
+      id:
+        (globalThis as any).crypto?.randomUUID?.() ??
+        `tmp_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       title: trimmedTitle,
       description: trimmedDescription ? trimmedDescription : null,
       createdAt: new Date().toISOString(),
     } satisfies Idea;
   },
   async deleteIdea(id) {
-    const res = await deleteIdeaRemote(id);
-    if (!res.ok) throw new Error(res.error);
+    const delRes = await deleteIdeaRemote(id);
+    if (!delRes.ok) {
+      throw new Error(delRes.error);
+    }
   },
 };
