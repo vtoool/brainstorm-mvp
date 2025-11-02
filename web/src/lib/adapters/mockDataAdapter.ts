@@ -116,8 +116,8 @@ function getParticipantsForTournament(state: PersistedState, tournamentId: strin
 }
 
 function computeSizeSuggestion(count: number) {
-  if (count <= 2) return 2;
-  const power = Math.pow(2, Math.ceil(Math.log2(Math.max(2, count))));
+  if (count <= 4) return 4;
+  const power = Math.pow(2, Math.ceil(Math.log2(Math.max(4, count))));
   return power;
 }
 
@@ -183,9 +183,13 @@ export function getMockDataPort(): DataPort {
 
     async createTournament(input: CreateTournamentInput) {
       const state = loadState();
-      const ideas = state.ideas.filter((idea) => input.ideaIds.includes(idea.id));
-      if (ideas.length === 0) {
-        throw new Error("Select at least one idea");
+      const uniqueIds = Array.from(new Set(input.ideaIds));
+      const ideas = uniqueIds
+        .map((id) => state.ideas.find((idea) => idea.id === id) ?? null)
+        .filter((idea): idea is Idea => idea !== null);
+
+      if (ideas.length < 4) {
+        throw new Error("Select at least four ideas to create a tournament.");
       }
 
       const createdAt = new Date().toISOString();
