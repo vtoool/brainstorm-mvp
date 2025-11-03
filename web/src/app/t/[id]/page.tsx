@@ -437,9 +437,9 @@ function FocusCompetitorCard({ participant, side, isFocused, onSelect, disabled 
 }
 
 const MATCH_WIDTH = 220;
-const MATCH_HEIGHT = 120;
+const MATCH_HEIGHT = 188;
 const COLUMN_GAP = 120;
-const VERTICAL_GAP = 48;
+const VERTICAL_GAP = 24;
 
 type BracketCanvasProps = {
   rounds: { round: number; matches: Match[] }[];
