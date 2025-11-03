@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Copy, RefreshCw } from "lucide-react";
@@ -81,6 +82,19 @@ export default function TournamentDetailPage() {
 
   const openMatches = useMemo(() => matches.filter((match) => match.status === "open"), [matches]);
 
+  const handleFocusMatch = useCallback(
+    (matchId: string) => {
+      if (tournament?.status === "active") {
+        const target = matches.find((match) => match.id === matchId);
+        if (!target || target.status !== "open") {
+          return;
+        }
+      }
+      setFocusedMatchId(matchId);
+    },
+    [matches, tournament?.status],
+  );
+
   useEffect(() => {
     if (matches.length === 0) {
       setFocusedMatchId(null);
@@ -100,27 +114,6 @@ export default function TournamentDetailPage() {
       return matches[0]?.id ?? null;
     });
   }, [matches, openMatches]);
-
-  useEffect(() => {
-    if (openMatches.length <= 1) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setFocusedMatchId((current) => {
-        if (!current) {
-          return openMatches[0]?.id ?? null;
-        }
-        const index = openMatches.findIndex((match) => match.id === current);
-        const nextMatch = openMatches[(index + 1) % openMatches.length];
-        return nextMatch?.id ?? current;
-      });
-    }, 5000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [openMatches]);
 
   async function updateMatches(nextMatches: Match[]) {
     setMatches(nextMatches);
@@ -320,55 +313,57 @@ export default function TournamentDetailPage() {
           <h2 className="text-lg font-semibold">Bracket arena</h2>
           <span className="text-xs text-[var(--muted)]">{matches.length} matches</span>
         </div>
-        <BracketCanvas
-          rounds={rounds}
-          matches={matches}
-          resolveParticipant={resolveParticipant}
-          focusedMatchId={focusedMatchId}
-          onFocus={setFocusedMatchId}
-          onPickWinner={handleWinner}
-          roomCode={tournament.roomCode}
-          isMutating={isMutating}
-        />
-        <AnimatePresence mode="wait">
-          {focusedMatch ? (
-            <motion.div
-              key={focusedMatch.id}
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -24 }}
-              transition={{ type: "spring", stiffness: 120, damping: 20 }}
-              className="relative overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--accent)_18%,transparent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-6"
-            >
-              <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_60%)]" aria-hidden />
-              <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                <span>Now battling</span>
-                <span>
-                  Match {focusedMatch.round}-{focusedMatch.position} · {focusedMatch.status}
-                </span>
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
-                <FocusCompetitorCard
-                  participant={focusParticipantA}
-                  side="a"
-                  isFocused={isFocusOpen}
-                  onSelect={() => void handleWinner(focusedMatch.id, "a")}
-                  disabled={!isFocusOpen || !focusParticipantA || !("id" in (focusParticipantA ?? {})) || isMutating}
-                />
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <span className="text-3xl font-black text-[var(--text)]">VS</span>
+        <div className="space-y-6 lg:grid lg:grid-cols-[minmax(260px,320px)_1fr] lg:items-start lg:gap-6 lg:space-y-0">
+          <AnimatePresence mode="wait">
+            {focusedMatch ? (
+              <motion.div
+                key={focusedMatch.id}
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -24 }}
+                transition={{ type: "spring", stiffness: 120, damping: 20 }}
+                className="relative overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--accent)_18%,transparent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-6"
+              >
+                <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_60%)]" aria-hidden />
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  <span>Now battling</span>
+                  <span>
+                    Match {focusedMatch.round}-{focusedMatch.position} · {focusedMatch.status}
+                  </span>
                 </div>
-                <FocusCompetitorCard
-                  participant={focusParticipantB}
-                  side="b"
-                  isFocused={isFocusOpen}
-                  onSelect={() => void handleWinner(focusedMatch.id, "b")}
-                  disabled={!isFocusOpen || !focusParticipantB || !("id" in (focusParticipantB ?? {})) || isMutating}
-                />
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+                <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                  <FocusCompetitorCard
+                    participant={focusParticipantA}
+                    side="a"
+                    isFocused={isFocusOpen}
+                    onSelect={() => void handleWinner(focusedMatch.id, "a")}
+                    disabled={!isFocusOpen || !focusParticipantA || !("id" in (focusParticipantA ?? {})) || isMutating}
+                  />
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <span className="text-3xl font-black text-[var(--text)]">VS</span>
+                  </div>
+                  <FocusCompetitorCard
+                    participant={focusParticipantB}
+                    side="b"
+                    isFocused={isFocusOpen}
+                    onSelect={() => void handleWinner(focusedMatch.id, "b")}
+                    disabled={!isFocusOpen || !focusParticipantB || !("id" in (focusParticipantB ?? {})) || isMutating}
+                  />
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+          <BracketCanvas
+            rounds={rounds}
+            matches={matches}
+            resolveParticipant={resolveParticipant}
+            focusedMatchId={focusedMatchId}
+            onFocus={handleFocusMatch}
+            onPickWinner={handleWinner}
+            isMutating={isMutating}
+            tournamentStatus={tournament.status}
+          />
+        </div>
       </section>
     </div>
   );
@@ -431,6 +426,8 @@ const MATCH_WIDTH = 220;
 const MATCH_HEIGHT = 188;
 const COLUMN_GAP = 120;
 const VERTICAL_GAP = 24;
+const MAX_MANUAL_SCALE = 2.5;
+const MIN_SCALE_FACTOR = 0.5;
 
 type BracketCanvasProps = {
   rounds: { round: number; matches: Match[] }[];
@@ -439,8 +436,8 @@ type BracketCanvasProps = {
   focusedMatchId: string | null;
   onFocus: (matchId: string) => void;
   onPickWinner: (matchId: string, side: MatchWinnerSide) => void;
-  roomCode: string;
   isMutating: boolean;
+  tournamentStatus: TournamentWithDetails["status"];
 };
 
 type LayoutEntry = {
@@ -457,8 +454,8 @@ function BracketCanvas({
   focusedMatchId,
   onFocus,
   onPickWinner,
-  roomCode,
   isMutating,
+  tournamentStatus,
 }: BracketCanvasProps) {
   const baseSpacing = MATCH_HEIGHT + VERTICAL_GAP;
   const layoutEntries = useMemo<LayoutEntry[]>(() => {
@@ -487,7 +484,15 @@ function BracketCanvas({
   const firstRoundCount = rounds[0]?.matches.length ?? 1;
   const boardHeight = Math.max((firstRoundCount - 1) * baseSpacing + MATCH_HEIGHT, MATCH_HEIGHT);
 
-  const { ref: viewportRef, size: viewportSize } = useElementSize<HTMLDivElement>();
+  const { ref: sizeRef, size: viewportSize } = useElementSize<HTMLDivElement>();
+  const viewportNodeRef = useRef<HTMLDivElement | null>(null);
+  const handleViewportRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      sizeRef(node);
+      viewportNodeRef.current = node;
+    },
+    [sizeRef],
+  );
   const baseScale = boardWidth === 0 || viewportSize.width === 0 ? 1 : Math.min(viewportSize.width / boardWidth, 1);
   const focusEntry = focusedMatchId ? layoutById.get(focusedMatchId) ?? null : null;
   const targetScale = focusEntry ? Math.min(baseScale * 1.25, 2.2) : baseScale;
@@ -527,19 +532,170 @@ function BracketCanvas({
   }, [layoutById, matches]);
 
   const viewportHeight = Math.min(Math.max(boardHeight + 120, 360), 720);
+  const canManuallyNavigate = tournamentStatus !== "active";
+  const [manualTransform, setManualTransform] = useState({
+    x: Number.isFinite(defaultOffsetX) ? defaultOffsetX : 0,
+    y: Number.isFinite(defaultOffsetY) ? defaultOffsetY : 0,
+    scale: baseScale,
+  });
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStateRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  }>({ pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
+
+  useEffect(() => {
+    if (!canManuallyNavigate) {
+      setHasInteracted(false);
+    }
+  }, [canManuallyNavigate]);
+
+  useEffect(() => {
+    if (!canManuallyNavigate) {
+      return;
+    }
+    if (hasInteracted) {
+      return;
+    }
+    setManualTransform({
+      x: Number.isFinite(defaultOffsetX) ? defaultOffsetX : 0,
+      y: Number.isFinite(defaultOffsetY) ? defaultOffsetY : 0,
+      scale: baseScale,
+    });
+  }, [baseScale, canManuallyNavigate, defaultOffsetX, defaultOffsetY, hasInteracted]);
+
+  const clampScale = useCallback(
+    (value: number) => {
+      const minScale = baseScale * MIN_SCALE_FACTOR;
+      return Math.min(Math.max(value, minScale), MAX_MANUAL_SCALE);
+    },
+    [baseScale],
+  );
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canManuallyNavigate) {
+        return;
+      }
+      if (event.button !== 0) {
+        return;
+      }
+      const target = event.target as HTMLElement;
+      if (target.closest("button")) {
+        return;
+      }
+      const element = event.currentTarget;
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: manualTransform.x,
+        originY: manualTransform.y,
+      };
+      element.setPointerCapture(event.pointerId);
+      setIsDragging(true);
+      setHasInteracted(true);
+    },
+    [canManuallyNavigate, manualTransform.x, manualTransform.y],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canManuallyNavigate) {
+        return;
+      }
+      const dragState = dragStateRef.current;
+      if (!isDragging || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+      const deltaX = event.clientX - dragState.startX;
+      const deltaY = event.clientY - dragState.startY;
+      setManualTransform((current) => ({
+        ...current,
+        x: dragState.originX + deltaX,
+        y: dragState.originY + deltaY,
+      }));
+    },
+    [canManuallyNavigate, isDragging],
+  );
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canManuallyNavigate) {
+        return;
+      }
+      const dragState = dragStateRef.current;
+      if (dragState.pointerId !== event.pointerId) {
+        return;
+      }
+      const element = event.currentTarget;
+      if (element.hasPointerCapture(event.pointerId)) {
+        element.releasePointerCapture(event.pointerId);
+      }
+      dragStateRef.current = { pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 };
+      setIsDragging(false);
+    },
+    [canManuallyNavigate],
+  );
+
+  const handleWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (!canManuallyNavigate) {
+        return;
+      }
+      const viewportElement = viewportNodeRef.current;
+      if (!viewportElement) {
+        return;
+      }
+      event.preventDefault();
+      const rect = viewportElement.getBoundingClientRect();
+      const offsetX = event.clientX - rect.left;
+      const offsetY = event.clientY - rect.top;
+      const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
+      setManualTransform((current) => {
+        const nextScale = clampScale(current.scale * zoomFactor);
+        const relativeX = (offsetX - current.x) / current.scale;
+        const relativeY = (offsetY - current.y) / current.scale;
+        const nextX = offsetX - relativeX * nextScale;
+        const nextY = offsetY - relativeY * nextScale;
+        return {
+          x: nextX,
+          y: nextY,
+          scale: nextScale,
+        };
+      });
+      setHasInteracted(true);
+    },
+    [canManuallyNavigate, clampScale],
+  );
+
+  const viewTransform = canManuallyNavigate
+    ? manualTransform
+    : { x: targetX, y: targetY, scale: targetScale };
+
+  const cursorClass = canManuallyNavigate ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default";
 
   return (
     <div
-      ref={viewportRef}
+      ref={handleViewportRef}
       className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]"
       style={{ height: viewportHeight }}
+      onWheel={handleWheel}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(90,110,255,0.08),_transparent_70%)]" aria-hidden />
       <motion.div
-        className="absolute inset-0"
+        className={`absolute inset-0 touch-none ${cursorClass}`}
         style={{ width: boardWidth, height: boardHeight, transformOrigin: "center center" }}
-        animate={{ x: targetX, y: targetY, scale: targetScale }}
+        animate={viewTransform}
         transition={{ type: "spring", stiffness: 120, damping: 20 }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
       >
         <svg className="absolute inset-0" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`}>
           {connections.map((connection) => (
@@ -567,7 +723,7 @@ function BracketCanvas({
               } ${isOpen ? "ring-1 ring-[color-mix(in_srgb,var(--accent)_40%,transparent)]" : ""}`}
               style={{ width: MATCH_WIDTH, height: MATCH_HEIGHT, left: x, top: y }}
               whileHover={{ scale: 1.02 }}
-              onMouseEnter={() => onFocus(match.id)}
+              onClick={() => onFocus(match.id)}
             >
               <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
                 <span>
