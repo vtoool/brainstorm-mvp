@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Copy, RefreshCw } from "lucide-react";
@@ -358,14 +357,6 @@ export default function TournamentDetailPage() {
                 />
                 <div className="flex flex-col items-center gap-2 text-center">
                   <span className="text-3xl font-black text-[var(--text)]">VS</span>
-                  {isFocusOpen ? (
-                    <Link
-                      href={`/room/${tournament.roomCode}?match=${focusedMatch.id}`}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]"
-                    >
-                      Cheer in room
-                    </Link>
-                  ) : null}
                 </div>
                 <FocusCompetitorCard
                   participant={focusParticipantB}
@@ -622,15 +613,6 @@ function BracketCanvas({
                   );
                 })}
               </div>
-              {isOpen ? (
-                <Link
-                  href={`/room/${roomCode}?match=${match.id}`}
-                  className="inline-flex w-full items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--accent)_32%,transparent)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
-                  onFocus={() => onFocus(match.id)}
-                >
-                  Cheer now
-                </Link>
-              ) : null}
             </motion.div>
           );
         })}
