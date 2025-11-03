@@ -1,22 +1,28 @@
 "use client";
 
 import {
+  type CreateIdeaFolderInput,
   type CreateIdeaInput,
   type CreateTournamentInput,
   type Idea,
+  type IdeaFolder,
   type Match,
   type MatchWinnerSide,
   type Participant,
   type Tournament,
   type TournamentWithDetails,
   type UpdateTournamentMetaInput,
+  type UpdateIdeaFolderInput,
 } from "@/lib/domain/types";
 import type { DataPort } from "@/lib/ports/DataPort";
 import { generateBracket, recordWinner } from "@/lib/bracket/generate";
 
 export const MOCK_STORAGE_KEY = "green-needle:mock-state";
 
+type FolderRecord = Omit<IdeaFolder, "ideas">;
+
 type PersistedState = {
+  folders: FolderRecord[];
   ideas: Idea[];
   tournaments: Tournament[];
   participants: Participant[];
@@ -24,6 +30,7 @@ type PersistedState = {
 };
 
 let memoryState: PersistedState = {
+  folders: [],
   ideas: [],
   tournaments: [],
   participants: [],
@@ -34,6 +41,10 @@ let hasLoadedFromStorage = false;
 
 function cloneIdea(idea: Idea): Idea {
   return { ...idea };
+}
+
+function cloneFolder(folder: FolderRecord): FolderRecord {
+  return { ...folder };
 }
 
 function cloneTournament(tournament: Tournament): Tournament {
@@ -68,7 +79,11 @@ function loadState(): PersistedState {
     if (stored) {
       const parsed = JSON.parse(stored) as PersistedState;
       memoryState = {
-        ideas: parsed.ideas ?? [],
+        folders: parsed.folders ?? [],
+        ideas: (parsed.ideas ?? []).map((idea) => ({
+          ...idea,
+          folderId: idea.folderId ?? null,
+        })),
         tournaments: parsed.tournaments ?? [],
         participants: parsed.participants ?? [],
         matches: parsed.matches ?? {},
@@ -99,6 +114,7 @@ function saveState(state: PersistedState) {
 function nextState(mutator: (draft: PersistedState) => void): PersistedState {
   const state = loadState();
   const draft: PersistedState = {
+    folders: state.folders.map(cloneFolder),
     ideas: state.ideas.map(cloneIdea),
     tournaments: state.tournaments.map(cloneTournament),
     participants: state.participants.map(cloneParticipant),
@@ -115,6 +131,14 @@ export function syncMockIdeas(ideas: Idea[]) {
   nextState((draft) => {
     draft.ideas = ideas.map(cloneIdea);
   });
+}
+
+function buildFolder(state: PersistedState, folder: FolderRecord): IdeaFolder {
+  const ideas = state.ideas
+    .filter((idea) => idea.folderId === folder.id)
+    .map(cloneIdea)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return { ...cloneFolder(folder), ideas };
 }
 
 function getParticipantsForTournament(state: PersistedState, tournamentId: string) {
@@ -147,6 +171,78 @@ function ensureMatches(state: PersistedState, tournamentId: string): Match[] {
 
 export function getMockDataPort(): DataPort {
   return {
+    async listIdeaFolders() {
+      const state = loadState();
+      return state.folders
+        .map((folder) => buildFolder(state, folder))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    },
+
+    async createIdeaFolder(input: CreateIdeaFolderInput) {
+      const title = input.title.trim();
+      if (!title) {
+        throw new Error("Folder title is required");
+      }
+      const now = new Date().toISOString();
+      const folder: FolderRecord = {
+        id: crypto.randomUUID(),
+        title,
+        description: input.description?.trim() ? input.description.trim() : null,
+        theme: input.theme?.trim() ? input.theme.trim() : null,
+        color: input.color?.trim() ? input.color.trim() : null,
+        icon: input.icon?.trim() ? input.icon.trim() : null,
+        createdAt: now,
+      };
+      const state = nextState((draft) => {
+        draft.folders.unshift(cloneFolder(folder));
+      });
+      return buildFolder(state, folder);
+    },
+
+    async updateIdeaFolder(id: string, patch: UpdateIdeaFolderInput) {
+      let updated: FolderRecord | null = null;
+      const state = nextState((draft) => {
+        const folder = draft.folders.find((item) => item.id === id);
+        if (!folder) {
+          return;
+        }
+        if (patch.title !== undefined) {
+          const trimmed = patch.title.trim();
+          if (trimmed) {
+            folder.title = trimmed;
+          }
+        }
+        if (patch.description !== undefined) {
+          const trimmed = patch.description?.trim();
+          folder.description = trimmed ? trimmed : null;
+        }
+        if (patch.theme !== undefined) {
+          const trimmed = patch.theme?.trim();
+          folder.theme = trimmed ? trimmed : null;
+        }
+        if (patch.color !== undefined) {
+          const trimmed = patch.color?.trim();
+          folder.color = trimmed ? trimmed : null;
+        }
+        if (patch.icon !== undefined) {
+          const trimmed = patch.icon?.trim();
+          folder.icon = trimmed ? trimmed : null;
+        }
+        updated = cloneFolder(folder);
+      });
+      if (!updated) {
+        return null;
+      }
+      return buildFolder(state, updated);
+    },
+
+    async deleteIdeaFolder(id: string) {
+      nextState((draft) => {
+        draft.folders = draft.folders.filter((folder) => folder.id !== id);
+        draft.ideas = draft.ideas.filter((idea) => idea.folderId !== id);
+      });
+    },
+
     async listIdeas() {
       const { ideas } = loadState();
       return ideas
@@ -160,8 +256,15 @@ export function getMockDataPort(): DataPort {
         throw new Error("Title is required");
       }
 
+      const state = loadState();
+      const folder = state.folders.find((item) => item.id === input.folderId);
+      if (!folder) {
+        throw new Error("Folder not found");
+      }
+
       const idea: Idea = {
         id: crypto.randomUUID(),
+        folderId: folder.id,
         title: trimmedTitle,
         description: input.description?.trim() ? input.description.trim() : null,
         createdAt: new Date().toISOString(),

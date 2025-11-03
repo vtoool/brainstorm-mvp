@@ -2,9 +2,11 @@
 
 import { generateBracket, recordWinner } from "@/lib/bracket/generate";
 import type {
+  CreateIdeaFolderInput,
   CreateIdeaInput,
   CreateTournamentInput,
   Idea,
+  IdeaFolder,
   Match,
   MatchWinnerSide,
   Participant,
@@ -13,6 +15,7 @@ import type {
   UpdateTournamentMetaInput,
   Visibility,
   TournamentStatus,
+  UpdateIdeaFolderInput,
 } from "@/lib/domain/types";
 import type { DataPort } from "@/lib/ports/DataPort";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
@@ -20,9 +23,22 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 interface IdeaRow {
   id: string;
+  folder_id: string | null;
   title: string;
   description: string | null;
   created_at: string;
+}
+
+interface IdeaFolderRow {
+  id: string;
+  owner: string;
+  title: string;
+  description: string | null;
+  theme: string | null;
+  color: string | null;
+  icon: string | null;
+  created_at: string;
+  ideas?: IdeaRow[] | null;
 }
 
 interface TournamentRow {
@@ -63,9 +79,26 @@ const matchIdsByTournament: MatchIdMap = new Map();
 function mapIdea(row: IdeaRow): Idea {
   return {
     id: row.id,
+    folderId: row.folder_id,
     title: row.title,
     description: row.description,
     createdAt: row.created_at,
+  };
+}
+
+function mapFolder(row: IdeaFolderRow): IdeaFolder {
+  const ideas = (row.ideas ?? [])
+    .map((idea) => mapIdea({ ...idea, folder_id: idea.folder_id ?? row.id }))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    theme: row.theme,
+    color: row.color,
+    icon: row.icon,
+    createdAt: row.created_at,
+    ideas,
   };
 }
 
@@ -218,10 +251,105 @@ export function getSupabaseDataPort(): DataPort {
   const supabase = getSupabaseBrowser();
 
   return {
+    async listIdeaFolders() {
+      const { data, error } = await supabase
+        .from("idea_folders")
+        .select(
+          "id,owner,title,description,theme,color,icon,created_at,ideas(id,folder_id,title,description,created_at)",
+        )
+        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false, foreignTable: "ideas" });
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []).map((row) => mapFolder(row as unknown as IdeaFolderRow));
+    },
+
+    async createIdeaFolder(input: CreateIdeaFolderInput) {
+      const title = input.title.trim();
+      if (!title) {
+        throw new Error("Folder title is required");
+      }
+      const { data: auth } = await supabase.auth.getUser();
+      await ensureProfile(supabase, auth.user);
+      const description = input.description?.trim() ?? null;
+      const theme = input.theme?.trim() ?? null;
+      const color = input.color?.trim() ?? null;
+      const icon = input.icon?.trim() ?? null;
+      const { data, error } = await supabase
+        .from("idea_folders")
+        .insert({ title, description, theme, color, icon })
+        .select(
+          "id,owner,title,description,theme,color,icon,created_at,ideas(id,folder_id,title,description,created_at)",
+        )
+        .single();
+      if (error) {
+        throw new Error(error.message);
+      }
+      return mapFolder(data as IdeaFolderRow);
+    },
+
+    async updateIdeaFolder(id: string, patch: UpdateIdeaFolderInput) {
+      const payload: Record<string, unknown> = {};
+      if (patch.title !== undefined) {
+        const trimmed = patch.title.trim();
+        if (trimmed) {
+          payload.title = trimmed;
+        }
+      }
+      if (patch.description !== undefined) {
+        payload.description = patch.description?.trim() ? patch.description.trim() : null;
+      }
+      if (patch.theme !== undefined) {
+        payload.theme = patch.theme?.trim() ? patch.theme.trim() : null;
+      }
+      if (patch.color !== undefined) {
+        payload.color = patch.color?.trim() ? patch.color.trim() : null;
+      }
+      if (patch.icon !== undefined) {
+        payload.icon = patch.icon?.trim() ? patch.icon.trim() : null;
+      }
+      if (Object.keys(payload).length === 0) {
+        const { data, error } = await supabase
+          .from("idea_folders")
+          .select(
+            "id,owner,title,description,theme,color,icon,created_at,ideas(id,folder_id,title,description,created_at)",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (error) {
+          throw new Error(error.message);
+        }
+        return data ? mapFolder(data as IdeaFolderRow) : null;
+      }
+      const { error } = await supabase.from("idea_folders").update(payload).eq("id", id);
+      if (error) {
+        throw new Error(error.message);
+      }
+      const { data, error: fetchError } = await supabase
+        .from("idea_folders")
+        .select(
+          "id,owner,title,description,theme,color,icon,created_at,ideas(id,folder_id,title,description,created_at)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+      return data ? mapFolder(data as IdeaFolderRow) : null;
+    },
+
+    async deleteIdeaFolder(id: string) {
+      const { error } = await supabase.from("idea_folders").delete().eq("id", id);
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+
     async listIdeas() {
       const { data, error } = await supabase
         .from("ideas")
-        .select("id,title,description,created_at")
+        .select("id,folder_id,title,description,created_at")
         .order("created_at", { ascending: false });
       if (error) {
         throw new Error(error.message);
@@ -239,10 +367,21 @@ export function getSupabaseDataPort(): DataPort {
         data: { user },
       } = await supabase.auth.getUser();
       await ensureProfile(supabase, user);
+      const { data: folderRow, error: folderError } = await supabase
+        .from("idea_folders")
+        .select("id")
+        .eq("id", input.folderId)
+        .maybeSingle();
+      if (folderError) {
+        throw new Error(folderError.message);
+      }
+      if (!folderRow) {
+        throw new Error("Folder not found");
+      }
       const { data, error } = await supabase
         .from("ideas")
-        .insert({ title, description })
-        .select("id,title,description,created_at")
+        .insert({ title, description, folder_id: input.folderId })
+        .select("id,folder_id,title,description,created_at")
         .single();
       if (error) {
         throw new Error(error.message);
