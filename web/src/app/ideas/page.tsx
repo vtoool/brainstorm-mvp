@@ -1,58 +1,101 @@
 "use client";
 
-import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { IdeaCard } from "@/components/IdeaCard";
+import { IdeaFolderCard } from "@/components/IdeaCard";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useAuthSession } from "@/hooks/useAuthSession";
 
-import { useIdeas } from "./useIdeas";
+import { useIdeaFolders } from "./useIdeaFolders";
+
+interface IdeaDraftState {
+  title: string;
+  description: string;
+}
 
 export default function IdeasPage() {
   const {
-    ideas,
+    folders,
     isLoading,
-    isAdding,
+    isCreatingFolder,
     isRefreshing,
+    creatingIdeaFor,
+    deletingFolderId,
+    deletingIdeaId,
     error,
-    addError,
+    folderError,
+    ideaError,
     justSaved,
-    addIdeaOptimistic,
+    createFolder,
+    addIdeaToFolder,
     removeIdea,
-    clearAddError,
-  } = useIdeas();
+    removeFolder,
+    clearFolderError,
+    clearIdeaError,
+  } = useIdeaFolders();
   const { session } = useAuthSession();
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [folderTitle, setFolderTitle] = useState("");
+  const [folderDescription, setFolderDescription] = useState("");
+  const [folderTheme, setFolderTheme] = useState("");
+  const [folderColor, setFolderColor] = useState("#34d399");
+  const [folderIcon, setFolderIcon] = useState("🗂️");
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [ideaDrafts, setIdeaDrafts] = useState<Record<string, IdeaDraftState>>({});
 
   const statusMessage = useMemo(() => {
-    if (isAdding || isRefreshing) return "Saving…";
+    if (isCreatingFolder || isRefreshing || creatingIdeaFor) return "Saving…";
     if (justSaved) return "Saved";
     return null;
-  }, [isAdding, isRefreshing, justSaved]);
+  }, [creatingIdeaFor, isCreatingFolder, isRefreshing, justSaved]);
 
-  const displayedIdeas = ideas.slice(0, 100);
-  const hasOverflow = ideas.length > displayedIdeas.length;
+  function resetFolderForm() {
+    setFolderTitle("");
+    setFolderDescription("");
+    setFolderTheme("");
+    setFolderColor("#34d399");
+    setFolderIcon("🗂️");
+    clearFolderError();
+  }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session || !title.trim()) return;
-    const wasAdded = await addIdeaOptimistic(title, description);
-    if (wasAdded) {
-      setTitle("");
-      setDescription("");
+    if (!session) return;
+    const created = await createFolder({
+      title: folderTitle,
+      description: folderDescription,
+      theme: folderTheme,
+      color: folderColor,
+      icon: folderIcon,
+    });
+    if (created) {
+      resetFolderForm();
     }
   }
 
-  async function handleRemove(id: string) {
+  function toggleFolder(folderId: string) {
+    setOpenFolderId((current) => (current === folderId ? null : folderId));
+    clearIdeaError();
+  }
+
+  function updateIdeaDraft(folderId: string, partial: Partial<IdeaDraftState>) {
+    setIdeaDrafts((current) => {
+      const existing = current[folderId] ?? { title: "", description: "" };
+      return { ...current, [folderId]: { ...existing, ...partial } };
+    });
+  }
+
+  async function handleAddIdea(event: FormEvent<HTMLFormElement>, folderId: string) {
+    event.preventDefault();
     if (!session) return;
-    if (!confirm("Delete this idea?")) return;
-    await removeIdea(id);
+    const draft = ideaDrafts[folderId] ?? { title: "", description: "" };
+    const wasAdded = await addIdeaToFolder(folderId, draft.title, draft.description);
+    if (wasAdded) {
+      updateIdeaDraft(folderId, { title: "", description: "" });
+    }
   }
 
   if (isLoading) {
@@ -95,20 +138,20 @@ export default function IdeasPage() {
             </div>
           </div>
           <form
-            onSubmit={handleSubmit}
+            onSubmit={handleCreateFolder}
             className="relative space-y-5 rounded-2xl border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--panel)_82%,white_12%)] p-6 shadow-[0_30px_80px_rgba(16,185,129,0.2)] backdrop-blur-sm"
           >
             <div className="space-y-2">
-              <label htmlFor="idea-title" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+              <label htmlFor="folder-title" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
                 Folder title
               </label>
               <Input
-                id="idea-title"
+                id="folder-title"
                 placeholder="Short title"
-                value={title}
+                value={folderTitle}
                 onChange={(event) => {
-                  setTitle(event.target.value);
-                  if (addError) clearAddError();
+                  setFolderTitle(event.target.value);
+                  if (folderError) clearFolderError();
                 }}
                 maxLength={120}
                 required
@@ -116,19 +159,64 @@ export default function IdeasPage() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="idea-description" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+              <label htmlFor="folder-theme" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+                Theme <span className="font-normal normal-case text-[color-mix(in_srgb,var(--muted)_60%,white_20%)]">(optional)</span>
+              </label>
+              <Input
+                id="folder-theme"
+                placeholder="e.g. Launch ideas"
+                value={folderTheme}
+                onChange={(event) => setFolderTheme(event.target.value)}
+                maxLength={60}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="folder-icon" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+                  Icon
+                </label>
+                <Input
+                  id="folder-icon"
+                  value={folderIcon}
+                  onChange={(event) => setFolderIcon(event.target.value.slice(0, 2))}
+                  maxLength={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="folder-color" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+                  Color tag
+                </label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="folder-color"
+                    type="color"
+                    value={folderColor}
+                    onChange={(event) => setFolderColor(event.target.value)}
+                    className="h-10 w-20 cursor-pointer rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--panel)_90%,white_10%)] p-1"
+                  />
+                  <Input
+                    value={folderColor}
+                    onChange={(event) => setFolderColor(event.target.value)}
+                    maxLength={32}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="folder-description" className="text-xs font-semibold uppercase tracking-[0.28em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
                 Description <span className="font-normal normal-case text-[color-mix(in_srgb,var(--muted)_60%,white_20%)]">(optional)</span>
               </label>
               <Textarea
-                id="idea-description"
+                id="folder-description"
                 placeholder="Add a few details or context"
-                value={description}
+                value={folderDescription}
                 onChange={(event) => {
-                  setDescription(event.target.value);
-                  if (addError) clearAddError();
+                  setFolderDescription(event.target.value);
+                  if (folderError) clearFolderError();
                 }}
                 maxLength={500}
-                className="min-h-[140px] border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--panel)_88%,white_12%)] shadow-[0_20px_45px_rgba(14,165,233,0.18)] focus:border-[color-mix(in_srgb,var(--accent)_60%,transparent)]"
+                className="min-h-[120px] border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--panel)_88%,white_12%)] shadow-[0_20px_45px_rgba(14,165,233,0.18)] focus:border-[color-mix(in_srgb,var(--accent)_60%,transparent)]"
               />
             </div>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -158,24 +246,24 @@ export default function IdeasPage() {
               <div className="flex items-center gap-3">
                 <Button
                   type="submit"
-                  disabled={!title.trim() || isAdding || !session}
-                  title={!session ? "Sign in to add ideas" : undefined}
+                  disabled={!folderTitle.trim() || isCreatingFolder || !session}
+                  title={!session ? "Sign in to add folders" : undefined}
                   className="shadow-[0_22px_45px_rgba(16,185,129,0.32)] hover:shadow-[0_28px_60px_rgba(14,165,233,0.28)]"
                 >
-                  {isAdding ? "Saving…" : "Add folder"}
+                  {isCreatingFolder ? "Saving…" : "Add folder"}
                 </Button>
               </div>
             </div>
             <AnimatePresence mode="wait">
-              {addError ? (
+              {folderError ? (
                 <motion.p
-                  key={addError}
+                  key={folderError}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   className="text-sm text-rose-400"
                 >
-                  {addError}
+                  {folderError}
                 </motion.p>
               ) : null}
             </AnimatePresence>
@@ -188,7 +276,7 @@ export default function IdeasPage() {
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold text-[color-mix(in_srgb,var(--text)_92%,black_8%)]">Idea folders</h2>
             <p className="text-sm text-[color-mix(in_srgb,var(--muted)_70%,white_12%)]">
-              {ideas.length === 0 ? "No folders yet—start a fresh collection." : `${ideas.length} folders on your shelf.`}
+              {folders.length === 0 ? "No folders yet—start a fresh collection." : `${folders.length} folders on your shelf.`}
             </p>
           </div>
           {error ? (
@@ -201,28 +289,106 @@ export default function IdeasPage() {
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
-            {displayedIdeas.map((idea) => (
-              <motion.div key={idea.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <div className="group relative">
-                  <IdeaCard title={idea.title} description={idea.description} />
-                  <div className="absolute right-6 top-6">
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => handleRemove(idea.id)}
-                      className="rounded-lg border border-transparent px-3 py-1 text-xs font-semibold text-rose-400 transition hover:border-rose-400/40 hover:bg-rose-400/10 hover:text-rose-500"
-                      disabled={!session}
-                      title={!session ? "Sign in to manage ideas" : undefined}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+            {folders.map((folder) => {
+              const draft = ideaDrafts[folder.id] ?? { title: "", description: "" };
+              const isOpen = openFolderId === folder.id;
+              return (
+                <motion.div key={folder.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                  <IdeaFolderCard folder={folder} isOpen={isOpen} onToggle={() => toggleFolder(folder.id)}>
+                    <div className="space-y-4">
+                      <form className="space-y-3 rounded-2xl border border-[color-mix(in_srgb,var(--border)_70%,transparent)] bg-[color-mix(in_srgb,var(--panel)_90%,white_10%)] p-4" onSubmit={(event) => handleAddIdea(event, folder.id)}>
+                        <div className="space-y-2">
+                          <label htmlFor={`idea-title-${folder.id}`} className="text-xs font-semibold uppercase tracking-[0.24em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+                            Idea title
+                          </label>
+                          <Input
+                            id={`idea-title-${folder.id}`}
+                            value={draft.title}
+                            onChange={(event) => {
+                              updateIdeaDraft(folder.id, { title: event.target.value });
+                              if (ideaError) clearIdeaError();
+                            }}
+                            maxLength={140}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label htmlFor={`idea-description-${folder.id}`} className="text-xs font-semibold uppercase tracking-[0.24em] text-[color-mix(in_srgb,var(--muted)_65%,white_18%)]">
+                            Details <span className="font-normal normal-case text-[color-mix(in_srgb,var(--muted)_60%,white_20%)]">(optional)</span>
+                          </label>
+                          <Textarea
+                            id={`idea-description-${folder.id}`}
+                            value={draft.description}
+                            onChange={(event) => updateIdeaDraft(folder.id, { description: event.target.value })}
+                            maxLength={500}
+                            className="min-h-[100px]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Button type="submit" size="sm" disabled={!draft.title.trim() || creatingIdeaFor === folder.id || !session} title={!session ? "Sign in to add ideas" : undefined}>
+                            {creatingIdeaFor === folder.id ? "Adding…" : "Add idea"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-rose-400 hover:text-rose-500"
+                            disabled={deletingFolderId === folder.id || !session}
+                            onClick={() => {
+                              if (!session) return;
+                              if (!confirm("Delete this folder and all ideas inside?")) return;
+                              void removeFolder(folder.id);
+                            }}
+                          >
+                            {deletingFolderId === folder.id ? "Removing…" : "Delete folder"}
+                          </Button>
+                        </div>
+                      </form>
+                      {folder.ideas.length > 0 ? (
+                        <ul className="space-y-3">
+                          {folder.ideas.map((idea) => (
+                            <li
+                              key={idea.id}
+                              className="rounded-2xl border border-[color-mix(in_srgb,var(--border)_65%,transparent)] bg-[color-mix(in_srgb,var(--panel)_92%,white_8%)] p-4"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                  <h4 className="font-semibold text-[color-mix(in_srgb,var(--text)_92%,black_8%)]">{idea.title}</h4>
+                                  {idea.description ? (
+                                    <p className="text-sm text-[color-mix(in_srgb,var(--muted)_70%,white_12%)]">{idea.description}</p>
+                                  ) : null}
+                                  <p className="text-xs uppercase tracking-[0.24em] text-[color-mix(in_srgb,var(--muted)_70%,white_12%)]">
+                                    {new Date(idea.createdAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => {
+                                    if (!session) return;
+                                    if (!confirm("Delete this idea?")) return;
+                                    void removeIdea(idea.id);
+                                  }}
+                                  disabled={deletingIdeaId === idea.id || !session}
+                                  className="rounded-lg border border-transparent px-3 py-1 text-xs font-semibold text-rose-400 transition hover:border-rose-400/40 hover:bg-rose-400/10 hover:text-rose-500"
+                                >
+                                  {deletingIdeaId === idea.id ? "Removing…" : "Delete"}
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-[color-mix(in_srgb,var(--muted)_70%,white_12%)]">No ideas yet—add your first spark to this folder.</p>
+                      )}
+                    </div>
+                  </IdeaFolderCard>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
           <AnimatePresence>
-            {ideas.length === 0 && !isLoading ? (
+            {folders.length === 0 ? (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0, y: 12 }}
@@ -238,11 +404,19 @@ export default function IdeasPage() {
             ) : null}
           </AnimatePresence>
         </div>
-        {hasOverflow ? (
-          <p className="text-xs text-[color-mix(in_srgb,var(--muted)_70%,white_12%)]">
-            Showing the latest 100 ideas. Narrow your list to see older entries.
-          </p>
-        ) : null}
+        <AnimatePresence mode="wait">
+          {ideaError ? (
+            <motion.p
+              key={ideaError}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="text-sm text-rose-400"
+            >
+              {ideaError}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
       </section>
     </div>
   );

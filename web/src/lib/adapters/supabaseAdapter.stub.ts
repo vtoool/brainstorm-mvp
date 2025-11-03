@@ -2,7 +2,7 @@
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
 // Shapes kept tiny so they’re easy to map in data.ts
-type IdeaRow = { id: string; title: string; description: string | null; created_at: string };
+type IdeaRow = { id: string; folder_id: string | null; title: string; description: string | null; created_at: string };
 
 export async function listIdeas(ownerId?: string) {
   const supabase = getSupabaseBrowser();
@@ -13,7 +13,7 @@ export async function listIdeas(ownerId?: string) {
 
   let q = supabase
     .from("ideas")
-    .select("id,title,description,created_at")
+    .select("id,folder_id,title,description,created_at")
     .order("created_at", { ascending: false });
 
   if (ownerId) q = q.eq("owner", ownerId); // optional; RLS will already scope rows
@@ -24,7 +24,15 @@ export async function listIdeas(ownerId?: string) {
     : { ok: true as const, data: (data ?? []) as IdeaRow[] };
 }
 
-export async function createIdea({ title, description }: { title: string; description?: string }) {
+export async function createIdea({
+  title,
+  description,
+  folderId,
+}: {
+  title: string;
+  description?: string;
+  folderId: string;
+}) {
   const supabase = getSupabaseBrowser();
 
   // Ensure we have a user so the RLS WITH CHECK passes
@@ -37,7 +45,7 @@ export async function createIdea({ title, description }: { title: string; descri
   // Inserting owner: user.id satisfies that policy. If your column default is auth.uid(),
   // you could omit owner entirely—but keeping it explicit avoids ambiguity.
   // Map undefined -> null for the nullable DB column.
-  const payload = { title, description: description ?? null, owner: user.id };
+  const payload = { title, description: description ?? null, owner: user.id, folder_id: folderId };
   const { error } = await supabase.from("ideas").insert(payload);
 
   return error ? { ok: false as const, error: error.message } : { ok: true as const };

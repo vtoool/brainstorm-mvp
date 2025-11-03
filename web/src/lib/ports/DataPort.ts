@@ -1,16 +1,24 @@
 import type {
+  CreateIdeaFolderInput,
   CreateIdeaInput,
   CreateTournamentInput,
   Idea,
+  IdeaFolder,
   Match,
   MatchWinnerSide,
   Participant,
   Tournament,
   TournamentWithDetails,
   UpdateTournamentMetaInput,
+  UpdateIdeaFolderInput,
 } from "@/lib/domain/types";
 
 export interface DataPort {
+  listIdeaFolders(): Promise<IdeaFolder[]>;
+  createIdeaFolder(input: CreateIdeaFolderInput): Promise<IdeaFolder>;
+  updateIdeaFolder(id: string, patch: UpdateIdeaFolderInput): Promise<IdeaFolder | null>;
+  deleteIdeaFolder(id: string): Promise<void>;
+
   listIdeas(): Promise<Idea[]>;
   createIdea(input: CreateIdeaInput): Promise<Idea>;
   deleteIdea(id: string): Promise<void>;

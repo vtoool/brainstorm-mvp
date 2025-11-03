@@ -8,9 +8,21 @@ export type MatchWinnerSide = "a" | "b";
 
 export interface Idea {
   id: string;
+  folderId: string | null;
   title: string;
   description: string | null;
   createdAt: string;
+}
+
+export interface IdeaFolder {
+  id: string;
+  title: string;
+  description: string | null;
+  theme: string | null;
+  color: string | null;
+  icon: string | null;
+  createdAt: string;
+  ideas: Idea[];
 }
 
 export interface Tournament {
@@ -55,8 +67,25 @@ export interface TournamentWithDetails extends Tournament {
 }
 
 export interface CreateIdeaInput {
+  folderId: string;
   title: string;
   description?: string;
+}
+
+export interface CreateIdeaFolderInput {
+  title: string;
+  description?: string;
+  theme?: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateIdeaFolderInput {
+  title?: string;
+  description?: string | null;
+  theme?: string | null;
+  color?: string | null;
+  icon?: string | null;
 }
 
 export interface CreateTournamentInput {
