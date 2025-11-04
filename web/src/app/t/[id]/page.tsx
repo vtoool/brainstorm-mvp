@@ -689,9 +689,13 @@ function BracketCanvas({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(90,110,255,0.08),_transparent_70%)]" aria-hidden />
       <motion.div
         className={`absolute inset-0 touch-none ${cursorClass}`}
-        style={{ width: boardWidth, height: boardHeight, transformOrigin: "center center" }}
+        style={{ width: boardWidth, height: boardHeight, transformOrigin: "0px 0px" }}
         animate={viewTransform}
-        transition={{ type: "spring", stiffness: 120, damping: 20 }}
+        transition={
+          canManuallyNavigate
+            ? { type: "tween", duration: 0 }
+            : { type: "spring", stiffness: 120, damping: 20 }
+        }
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
