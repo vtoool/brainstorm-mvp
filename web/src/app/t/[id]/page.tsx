@@ -306,14 +306,6 @@ export default function TournamentDetailPage() {
               <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> Reset bracket
             </Button>
           </div>
-        </div>
-      </aside>
-      <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Bracket arena</h2>
-          <span className="text-xs text-[var(--muted)]">{matches.length} matches</span>
-        </div>
-        <div className="space-y-6 lg:grid lg:grid-cols-[minmax(260px,320px)_1fr] lg:items-start lg:gap-6 lg:space-y-0">
           <AnimatePresence mode="wait">
             {focusedMatch ? (
               <motion.div
@@ -353,6 +345,14 @@ export default function TournamentDetailPage() {
               </motion.div>
             ) : null}
           </AnimatePresence>
+        </div>
+      </aside>
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Bracket arena</h2>
+          <span className="text-xs text-[var(--muted)]">{matches.length} matches</span>
+        </div>
+        <div className="space-y-6">
           <BracketCanvas
             rounds={rounds}
             matches={matches}
