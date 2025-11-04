@@ -573,6 +573,9 @@ export function getSupabaseDataPort(): DataPort {
         }
         return {
           id: dbId,
+          tournament_id: tournamentId,
+          round: match.round,
+          position: match.position,
           status: match.status,
           left_participant_id: match.sides.a.participantId,
           right_participant_id: match.sides.b.participantId,
