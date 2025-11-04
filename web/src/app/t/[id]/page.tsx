@@ -387,7 +387,6 @@ function FocusCompetitorCard({ participant, side, isFocused, onSelect, disabled 
   return (
     <motion.button
       type="button"
-      layout
       disabled={disabled}
       onClick={onSelect}
       className={`group relative overflow-hidden rounded-2xl border px-5 py-4 text-left shadow-[0_16px_40px_rgba(0,0,0,0.25)] transition ${
@@ -721,7 +720,6 @@ function BracketCanvas({
           return (
             <motion.div
               key={match.id}
-              layout
               className={`absolute flex h-full w-full flex-col justify-between rounded-2xl border bg-[var(--card)] p-4 shadow-lg transition ${
                 isFocused ? "border-[var(--accent)] shadow-[0_24px_48px_rgba(0,0,0,0.35)]" : "border-[color-mix(in_srgb,var(--border)_70%,transparent)]"
               } ${isOpen ? "ring-1 ring-[color-mix(in_srgb,var(--accent)_40%,transparent)]" : ""}`}
