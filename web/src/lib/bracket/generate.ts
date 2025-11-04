@@ -1,16 +1,12 @@
 import type { Match, MatchWinnerSide, Participant, RoundStatus } from "@/lib/domain/types";
+import { shuffleArray } from "@/lib/utils/shuffle";
+
+type GenerateBracketOptions = {
+  shuffle?: boolean;
+};
 
 function powerOfTwoCeil(value: number) {
   return Math.pow(2, Math.max(1, Math.ceil(Math.log2(Math.max(2, value)))));
-}
-
-function createSeedingOrder(size: number): number[] {
-  if (size === 2) {
-    return [1, 2];
-  }
-  const previous = createSeedingOrder(size / 2);
-  const mirrored = previous.map((seed) => size + 1 - seed);
-  return [...previous, ...mirrored];
 }
 
 function cloneMatch(match: Match): Match {
@@ -66,17 +62,20 @@ function autoAdvanceByes(matches: Match[]): Match[] {
   return nextMatches;
 }
 
-export function generateBracket(participants: Participant[]): Match[] {
+export function generateBracket(participants: Participant[], options: GenerateBracketOptions = {}): Match[] {
   if (participants.length === 0) {
     return [];
   }
 
+  const { shuffle = true } = options;
   const tournamentId = participants[0]?.tournamentId ?? "";
   const sorted = [...participants].sort((a, b) => a.seed - b.seed);
-  const bracketSize = powerOfTwoCeil(sorted.length);
-  const order = createSeedingOrder(bracketSize);
-  const seedsByNumber = new Map(sorted.map((participant) => [participant.seed, participant] as const));
-  const slots = order.map((seed) => seedsByNumber.get(seed) ?? null);
+  const ordered = shuffle ? shuffleArray(sorted) : sorted;
+  const bracketSize = powerOfTwoCeil(ordered.length);
+  const slots: Array<Participant | null> = Array.from(
+    { length: bracketSize },
+    (_, index) => ordered[index] ?? null,
+  );
   const totalRounds = Math.log2(bracketSize);
 
   const matches: Match[] = [];
@@ -99,8 +98,9 @@ export function generateBracket(participants: Participant[]): Match[] {
       };
 
       if (round === 1) {
-        const participantA = slots[(position - 1) * 2];
-        const participantB = slots[(position - 1) * 2 + 1];
+        const baseIndex = (position - 1) * 2;
+        const participantA = slots[baseIndex];
+        const participantB = slots[baseIndex + 1];
         match.sides.a.participantId = participantA?.id ?? null;
         match.sides.b.participantId = participantB?.id ?? null;
       }
@@ -153,7 +153,7 @@ if (process.env.NODE_ENV === "development") {
     ideaTitle: `Idea ${index + 1}`,
     seed: index + 1,
   }));
-  const bracket = generateBracket(participants);
+  const bracket = generateBracket(participants, { shuffle: false });
   console.assert(bracket.length === 3, "Expected 3 matches for 4 participants");
   const firstMatch = bracket.find((match) => match.id === "match-r1-p1");
   console.assert(firstMatch?.sides.a.participantId === "p-1", "Seed 1 should be in the first slot");

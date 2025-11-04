@@ -16,6 +16,7 @@ import {
 } from "@/lib/domain/types";
 import type { DataPort } from "@/lib/ports/DataPort";
 import { generateBracket, recordWinner } from "@/lib/bracket/generate";
+import { shuffleArray } from "@/lib/utils/shuffle";
 
 export const MOCK_STORAGE_KEY = "green-needle:mock-state";
 
@@ -301,6 +302,8 @@ export function getMockDataPort(): DataPort {
         throw new Error("Select at least four ideas to create a tournament.");
       }
 
+      const shuffledIdeas = shuffleArray(ideas);
+
       const createdAt = new Date().toISOString();
       const tournament: Tournament = {
         id: crypto.randomUUID(),
@@ -308,12 +311,12 @@ export function getMockDataPort(): DataPort {
         visibility: input.visibility,
         status: "draft",
         createdAt,
-        sizeSuggestion: computeSizeSuggestion(ideas.length),
-        ideaCount: ideas.length,
+        sizeSuggestion: computeSizeSuggestion(shuffledIdeas.length),
+        ideaCount: shuffledIdeas.length,
         roomCode: createRoomCode(),
       };
 
-      const participants: Participant[] = ideas.map((idea, index) => ({
+      const participants: Participant[] = shuffledIdeas.map((idea, index) => ({
         id: crypto.randomUUID(),
         tournamentId: tournament.id,
         ideaId: idea.id,
@@ -321,7 +324,7 @@ export function getMockDataPort(): DataPort {
         seed: index + 1,
       }));
 
-      const matches = generateBracket(participants);
+      const matches = generateBracket(participants, { shuffle: false });
 
       nextState((draft) => {
         draft.tournaments.unshift(cloneTournament(tournament));
@@ -416,7 +419,7 @@ export function getMockDataPort(): DataPort {
           const next = participants.find((item) => item.id === participant.id);
           return next ? cloneParticipant(next) : participant;
         });
-        draft.matches[tournamentId] = generateBracket(participants).map(cloneMatch);
+        draft.matches[tournamentId] = generateBracket(participants, { shuffle: false }).map(cloneMatch);
       });
 
       return ensureMatches(loadState(), tournamentId);

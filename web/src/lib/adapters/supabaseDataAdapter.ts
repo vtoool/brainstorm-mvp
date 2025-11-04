@@ -19,6 +19,7 @@ import type {
 } from "@/lib/domain/types";
 import type { DataPort } from "@/lib/ports/DataPort";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
+import { shuffleArray } from "@/lib/utils/shuffle";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 interface IdeaRow {
@@ -437,7 +438,8 @@ export function getSupabaseDataPort(): DataPort {
       if (orderedIdeas.length < 4) {
         throw new Error("Select at least four ideas to create a tournament.");
       }
-      const sizeSuggestion = computeSizeSuggestion(orderedIdeas.length, input.sizeSuggestion ?? null);
+      const shuffledIdeas = shuffleArray(orderedIdeas);
+      const sizeSuggestion = computeSizeSuggestion(shuffledIdeas.length, input.sizeSuggestion ?? null);
       const generatedRoomCode = createRoomCode();
       const basePayload: Record<string, unknown> = {
         owner: user.id,
@@ -469,7 +471,7 @@ export function getSupabaseDataPort(): DataPort {
       if (!tournamentRow) {
         throw new Error(insertError?.message ?? "Failed to create tournament.");
       }
-      const participantPayload = orderedIdeas.map((idea, index) => ({
+      const participantPayload = shuffledIdeas.map((idea, index) => ({
         tournament_id: tournamentRow!.id,
         idea_id: idea.id,
         seed: index + 1,
@@ -482,7 +484,7 @@ export function getSupabaseDataPort(): DataPort {
         throw new Error(participantError.message);
       }
       const participants = (participantRows ?? []).map((row) => mapParticipant(row as unknown as ParticipantRow));
-      const bracket = generateBracket(participants);
+      const bracket = generateBracket(participants, { shuffle: false });
       const matchesPayload = bracket.map((match) => ({
         tournament_id: tournamentRow!.id,
         round: match.round,
@@ -605,7 +607,7 @@ export function getSupabaseDataPort(): DataPort {
         throw new Error(error.message);
       }
       const participants = await fetchParticipants(supabase, tournamentId);
-      const bracket = generateBracket(participants);
+      const bracket = generateBracket(participants, { shuffle: false });
       await ensureMatchMappingLoaded(supabase, tournamentId);
       return await this.saveBracket(tournamentId, bracket);
     },
