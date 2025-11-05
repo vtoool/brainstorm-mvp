@@ -5,9 +5,10 @@ type GenerateBracketOptions = {
   shuffle?: boolean;
 };
 
-function powerOfTwoCeil(value: number) {
-  return Math.pow(2, Math.max(1, Math.ceil(Math.log2(Math.max(2, value)))));
-}
+type Entry = {
+  participantId: string | null;
+  sourceMatchId: string | null;
+};
 
 function cloneMatch(match: Match): Match {
   return {
@@ -71,19 +72,24 @@ export function generateBracket(participants: Participant[], options: GenerateBr
   const tournamentId = participants[0]?.tournamentId ?? "";
   const sorted = [...participants].sort((a, b) => a.seed - b.seed);
   const ordered = shuffle ? shuffleArray(sorted) : sorted;
-  const bracketSize = powerOfTwoCeil(ordered.length);
-  const slots: Array<Participant | null> = Array.from(
-    { length: bracketSize },
-    (_, index) => ordered[index] ?? null,
-  );
-  const totalRounds = Math.log2(bracketSize);
-
   const matches: Match[] = [];
 
-  for (let round = 1; round <= totalRounds; round += 1) {
-    const matchesInRound = bracketSize / Math.pow(2, round);
+  let currentEntries: Entry[] = ordered.map((participant) => ({
+    participantId: participant.id,
+    sourceMatchId: null,
+  }));
+  let round = 1;
+
+  while (currentEntries.length > 1) {
+    const matchesInRound = Math.ceil(currentEntries.length / 2);
+    const nextRoundEntries: Entry[] = [];
+
     for (let position = 1; position <= matchesInRound; position += 1) {
+      const index = (position - 1) * 2;
+      const entryA = currentEntries[index] ?? null;
+      const entryB = currentEntries[index + 1] ?? null;
       const id = `match-r${round}-p${position}`;
+
       const match: Match = {
         id,
         tournamentId,
@@ -91,22 +97,22 @@ export function generateBracket(participants: Participant[], options: GenerateBr
         position,
         status: "pending",
         sides: {
-          a: { participantId: null, sourceMatchId: round === 1 ? null : `match-r${round - 1}-p${position * 2 - 1}` },
-          b: { participantId: null, sourceMatchId: round === 1 ? null : `match-r${round - 1}-p${position * 2}` },
+          a: entryA
+            ? { participantId: entryA.participantId, sourceMatchId: entryA.sourceMatchId }
+            : { participantId: null, sourceMatchId: null },
+          b: entryB
+            ? { participantId: entryB.participantId, sourceMatchId: entryB.sourceMatchId }
+            : { participantId: null, sourceMatchId: null },
         },
         winnerSide: null,
       };
 
-      if (round === 1) {
-        const baseIndex = (position - 1) * 2;
-        const participantA = slots[baseIndex];
-        const participantB = slots[baseIndex + 1];
-        match.sides.a.participantId = participantA?.id ?? null;
-        match.sides.b.participantId = participantB?.id ?? null;
-      }
-
       matches.push(match);
+      nextRoundEntries.push({ participantId: null, sourceMatchId: id });
     }
+
+    currentEntries = nextRoundEntries;
+    round += 1;
   }
 
   return autoAdvanceByes(matches);
