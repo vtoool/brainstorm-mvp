@@ -1,14 +1,17 @@
 "use client";
 
 import {
+  type ChatMessage,
   type CreateIdeaFolderInput,
   type CreateIdeaInput,
   type CreateTournamentInput,
+  type Friend,
   type Idea,
   type IdeaFolder,
   type Match,
   type MatchWinnerSide,
   type Participant,
+  type Profile,
   type Tournament,
   type TournamentWithDetails,
   type UpdateTournamentMetaInput,
@@ -22,13 +25,53 @@ export const MOCK_STORAGE_KEY = "green-needle:mock-state";
 
 type FolderRecord = Omit<IdeaFolder, "ideas">;
 
+type StoredProfile = Profile;
+type StoredFriend = Friend;
+type StoredMessage = ChatMessage;
+
 type PersistedState = {
   folders: FolderRecord[];
   ideas: Idea[];
   tournaments: Tournament[];
   participants: Participant[];
   matches: Record<string, Match[]>;
+  profile: StoredProfile;
+  friends: StoredFriend[];
+  chatByTournament: Record<string, StoredMessage[]>;
 };
+
+const directoryTimestamp = new Date().toISOString();
+
+const MOCK_DIRECTORY: StoredProfile[] = [
+  {
+    id: "mock-user",
+    email: "mock@example.com",
+    nickname: "MockUser",
+    createdAt: directoryTimestamp,
+    updatedAt: directoryTimestamp,
+  },
+  {
+    id: "mock-friend-nova",
+    email: "nova@example.com",
+    nickname: "Nova",
+    createdAt: directoryTimestamp,
+    updatedAt: directoryTimestamp,
+  },
+  {
+    id: "mock-friend-echo",
+    email: "echo@example.com",
+    nickname: "Echo",
+    createdAt: directoryTimestamp,
+    updatedAt: directoryTimestamp,
+  },
+  {
+    id: "mock-friend-lyra",
+    email: "lyra@example.com",
+    nickname: "Lyra",
+    createdAt: directoryTimestamp,
+    updatedAt: directoryTimestamp,
+  },
+];
 
 let memoryState: PersistedState = {
   folders: [],
@@ -36,6 +79,15 @@ let memoryState: PersistedState = {
   tournaments: [],
   participants: [],
   matches: {},
+  profile: cloneProfile(MOCK_DIRECTORY[0] ?? {
+    id: "mock-user",
+    email: "mock@example.com",
+    nickname: "MockUser",
+    createdAt: directoryTimestamp,
+    updatedAt: directoryTimestamp,
+  }),
+  friends: [],
+  chatByTournament: {},
 };
 
 let hasLoadedFromStorage = false;
@@ -66,6 +118,39 @@ function cloneMatch(match: Match): Match {
   };
 }
 
+function cloneProfile(profile: StoredProfile): StoredProfile {
+  return { ...profile };
+}
+
+function cloneFriend(friend: StoredFriend): StoredFriend {
+  return { ...friend };
+}
+
+function cloneMessage(message: StoredMessage): StoredMessage {
+  return { ...message };
+}
+
+function findDirectoryProfileById(id: string): StoredProfile | null {
+  return MOCK_DIRECTORY.find((profile) => profile.id === id) ?? null;
+}
+
+function searchDirectoryByNickname(query: string): StoredProfile[] {
+  if (!query.trim()) {
+    return [];
+  }
+  const normalized = query.trim().toLowerCase();
+  return MOCK_DIRECTORY.filter((profile) =>
+    (profile.nickname ?? "").toLowerCase().includes(normalized),
+  );
+}
+
+function syncDirectoryProfile(updated: StoredProfile) {
+  const index = MOCK_DIRECTORY.findIndex((profile) => profile.id === updated.id);
+  if (index !== -1) {
+    MOCK_DIRECTORY[index] = cloneProfile(updated);
+  }
+}
+
 function loadState(): PersistedState {
   if (hasLoadedFromStorage) {
     return memoryState;
@@ -85,10 +170,36 @@ function loadState(): PersistedState {
           ...idea,
           folderId: idea.folderId ?? null,
         })),
-        tournaments: parsed.tournaments ?? [],
+        tournaments: (parsed.tournaments ?? []).map((tournament) => ({
+          ...tournament,
+          ownerId: tournament.ownerId ?? (parsed.profile?.id ?? memoryState.profile.id),
+        })),
         participants: parsed.participants ?? [],
         matches: parsed.matches ?? {},
+        profile: parsed.profile
+          ? {
+              ...parsed.profile,
+              nickname: parsed.profile.nickname ?? null,
+              email: parsed.profile.email ?? null,
+            }
+          : cloneProfile(memoryState.profile),
+        friends: (parsed.friends ?? []).map((friend) => ({
+          profileId: friend.profileId,
+          nickname: friend.nickname ?? null,
+          email: friend.email ?? null,
+          addedAt: friend.addedAt,
+        })),
+        chatByTournament: Object.fromEntries(
+          Object.entries(parsed.chatByTournament ?? {}).map(([id, list]) => [
+            id,
+            list.map((message) => ({
+              ...message,
+              authorNickname: message.authorNickname ?? null,
+            })),
+          ]),
+        ),
       };
+      syncDirectoryProfile(memoryState.profile);
     }
   } catch (error) {
     console.warn("Failed to load mock data", error);
@@ -121,6 +232,11 @@ function nextState(mutator: (draft: PersistedState) => void): PersistedState {
     participants: state.participants.map(cloneParticipant),
     matches: Object.fromEntries(
       Object.entries(state.matches).map(([id, list]) => [id, list.map(cloneMatch)]),
+    ),
+    profile: cloneProfile(state.profile),
+    friends: state.friends.map(cloneFriend),
+    chatByTournament: Object.fromEntries(
+      Object.entries(state.chatByTournament).map(([id, list]) => [id, list.map(cloneMessage)]),
     ),
   };
   mutator(draft);
@@ -159,8 +275,10 @@ function createRoomCode() {
 
 function buildTournamentDetails(state: PersistedState, tournament: Tournament): TournamentWithDetails {
   const participants = getParticipantsForTournament(state, tournament.id).map(cloneParticipant);
+  const base = cloneTournament(tournament);
+  base.ideaCount = participants.length;
   return {
-    ...cloneTournament(tournament),
+    ...base,
     participants,
   };
 }
@@ -285,9 +403,13 @@ export function getMockDataPort(): DataPort {
     },
 
     async listTournaments() {
-      const { tournaments } = loadState();
-      return tournaments
-        .map(cloneTournament)
+      const state = loadState();
+      return state.tournaments
+        .map((tournament) => {
+          const clone = cloneTournament(tournament);
+          clone.ideaCount = getParticipantsForTournament(state, tournament.id).length;
+          return clone;
+        })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     },
 
@@ -307,6 +429,7 @@ export function getMockDataPort(): DataPort {
       const createdAt = new Date().toISOString();
       const tournament: Tournament = {
         id: crypto.randomUUID(),
+        ownerId: state.profile.id,
         name: input.name.trim() || "Untitled Tournament",
         visibility: input.visibility,
         status: "draft",
@@ -368,6 +491,15 @@ export function getMockDataPort(): DataPort {
       return buildTournamentDetails(loadState(), nextTournament);
     },
 
+    async deleteTournament(id: string) {
+      nextState((draft) => {
+        draft.tournaments = draft.tournaments.filter((item) => item.id !== id);
+        draft.participants = draft.participants.filter((participant) => participant.tournamentId !== id);
+        delete draft.matches[id];
+        delete draft.chatByTournament[id];
+      });
+    },
+
     async getParticipants(tournamentId: string) {
       const state = loadState();
       return getParticipantsForTournament(state, tournamentId).map(cloneParticipant);
@@ -423,6 +555,137 @@ export function getMockDataPort(): DataPort {
       });
 
       return ensureMatches(loadState(), tournamentId);
+    },
+
+    async getProfile() {
+      const state = loadState();
+      return cloneProfile(state.profile);
+    },
+
+    async updateProfileNickname(nickname: string) {
+      const trimmed = nickname.trim();
+      if (trimmed.length < 2) {
+        throw new Error("Nickname must be at least two characters long.");
+      }
+      const state = loadState();
+      const conflict = MOCK_DIRECTORY.some(
+        (profile) => profile.id !== state.profile.id && (profile.nickname ?? "").toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (conflict) {
+        throw new Error("That nickname is already taken in the mock directory.");
+      }
+      let updated: StoredProfile | null = null;
+      nextState((draft) => {
+        draft.profile = {
+          ...draft.profile,
+          nickname: trimmed,
+          updatedAt: new Date().toISOString(),
+        };
+        updated = cloneProfile(draft.profile);
+      });
+      if (!updated) {
+        throw new Error("Failed to update nickname.");
+      }
+      syncDirectoryProfile(updated);
+      return updated;
+    },
+
+    async listFriends() {
+      const state = loadState();
+      return state.friends
+        .map(cloneFriend)
+        .sort((a, b) => (a.nickname ?? "").localeCompare(b.nickname ?? ""));
+    },
+
+    async addFriend(profileId: string) {
+      const state = loadState();
+      if (!profileId) {
+        throw new Error("Select a profile to add as a friend.");
+      }
+      if (profileId === state.profile.id) {
+        throw new Error("You can’t add yourself as a friend.");
+      }
+      const directoryProfile = findDirectoryProfileById(profileId);
+      if (!directoryProfile) {
+        throw new Error("Profile not found in the mock directory.");
+      }
+      let nextFriend: StoredFriend | null = null;
+      nextState((draft) => {
+        const existing = draft.friends.find((friend) => friend.profileId === profileId);
+        if (existing) {
+          nextFriend = cloneFriend(existing);
+          return;
+        }
+        const created: StoredFriend = {
+          profileId,
+          nickname: directoryProfile.nickname ?? null,
+          email: directoryProfile.email ?? null,
+          addedAt: new Date().toISOString(),
+        };
+        draft.friends.push(cloneFriend(created));
+        nextFriend = created;
+      });
+      if (!nextFriend) {
+        throw new Error("Failed to add friend.");
+      }
+      return cloneFriend(nextFriend);
+    },
+
+    async removeFriend(profileId: string) {
+      nextState((draft) => {
+        draft.friends = draft.friends.filter((friend) => friend.profileId !== profileId);
+      });
+    },
+
+    async searchProfiles(query: string) {
+      const state = loadState();
+      const matches = searchDirectoryByNickname(query).map((profile) => {
+        if (profile.id === state.profile.id) {
+          return cloneProfile(state.profile);
+        }
+        return cloneProfile(profile);
+      });
+      return matches;
+    },
+
+    async listChatMessages(tournamentId: string) {
+      const state = loadState();
+      const messages = state.chatByTournament[tournamentId] ?? [];
+      return messages
+        .map(cloneMessage)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    },
+
+    async sendChatMessage(tournamentId: string, content: string) {
+      const trimmed = content.trim();
+      if (!trimmed) {
+        throw new Error("Message cannot be empty.");
+      }
+      const state = loadState();
+      if (!state.profile.nickname || state.profile.nickname.trim().length < 2) {
+        throw new Error("Set a nickname in settings before chatting.");
+      }
+      const message: StoredMessage = {
+        id: crypto.randomUUID(),
+        tournamentId,
+        authorId: state.profile.id,
+        authorNickname: state.profile.nickname,
+        content: trimmed,
+        createdAt: new Date().toISOString(),
+      };
+      nextState((draft) => {
+        const existing = draft.chatByTournament[tournamentId] ?? [];
+        const next = [...existing.map(cloneMessage), message];
+        next.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        draft.chatByTournament[tournamentId] = next;
+      });
+      return cloneMessage(message);
+    },
+
+    subscribeToChatMessages(_tournamentId: string, _handler: (message: ChatMessage) => void) {
+      return () => {
+        // No live updates in mock mode.
+      };
     },
   } satisfies DataPort;
 }

@@ -7,10 +7,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Copy, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { TournamentChat } from "@/components/tournaments/TournamentChat";
 import type { Match, MatchWinnerSide, Participant, TournamentWithDetails } from "@/lib/domain/types";
 import { dataPort } from "@/lib/data";
 import { computeOpenMatches, nextRound } from "@/lib/bracket/generate";
 import { useElementSize } from "@/hooks/useElementSize";
+import { useAuthSession } from "@/hooks/useAuthSession";
 
 const statusLabels: Record<TournamentWithDetails["status"], string> = {
   draft: "Draft",
@@ -28,6 +30,7 @@ export default function TournamentDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { session } = useAuthSession();
   const [tournament, setTournament] = useState<TournamentWithDetails | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [participants, setParticipants] = useState<Record<string, Participant>>({});
@@ -36,12 +39,15 @@ export default function TournamentDetailPage() {
   const [isMutating, setIsMutating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     void (async () => {
       try {
         setError(null);
+        setDeleteError(null);
         setIsLoading(true);
         const [details, bracket] = await Promise.all([dataPort.getTournament(id), dataPort.getBracket(id)]);
         if (!isMounted) return;
@@ -181,6 +187,24 @@ export default function TournamentDetailPage() {
     }
   }
 
+  const handleDelete = useCallback(async () => {
+    if (!tournament) return;
+    if (!confirm("Delete this tournament? This can’t be undone.")) {
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await dataPort.deleteTournament(tournament.id);
+      router.push("/t");
+    } catch (unknownError) {
+      const message = unknownError instanceof Error ? unknownError.message : "Failed to delete tournament.";
+      setDeleteError(message);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [router, tournament]);
+
   async function handleWinner(matchId: string, side: MatchWinnerSide) {
     setIsMutating(true);
     try {
@@ -226,6 +250,8 @@ export default function TournamentDetailPage() {
   const focusParticipantA = focusedMatch ? resolveParticipant(focusedMatch, "a") : null;
   const focusParticipantB = focusedMatch ? resolveParticipant(focusedMatch, "b") : null;
   const isFocusOpen = focusedMatch?.status === "open";
+  const currentUserId = session?.user?.id ?? null;
+  const canManage = tournament && currentUserId ? tournament.ownerId === currentUserId : false;
 
   if (isLoading) {
     return (
@@ -305,7 +331,19 @@ export default function TournamentDetailPage() {
             <Button type="button" variant="subtle" onClick={handleReset} disabled={isMutating}>
               <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> Reset bracket
             </Button>
+            {canManage ? (
+              <Button
+                type="button"
+                variant="subtle"
+                className="text-rose-500 hover:bg-rose-500/10"
+                onClick={() => void handleDelete()}
+                disabled={isMutating || isDeleting}
+              >
+                {isDeleting ? "Deleting…" : "Delete tournament"}
+              </Button>
+            ) : null}
           </div>
+          {deleteError ? <p className="text-sm text-rose-400">{deleteError}</p> : null}
           <AnimatePresence mode="wait">
             {focusedMatch ? (
               <motion.div
@@ -363,6 +401,7 @@ export default function TournamentDetailPage() {
             isMutating={isMutating}
             tournamentStatus={tournament.status}
           />
+          <TournamentChat tournamentId={tournament.id} />
         </div>
       </section>
     </div>

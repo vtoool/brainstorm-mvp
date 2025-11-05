@@ -27,6 +27,7 @@ export interface IdeaFolder {
 
 export interface Tournament {
   id: string;
+  ownerId: string;
   name: string;
   visibility: Visibility;
   status: TournamentStatus;
@@ -64,6 +65,30 @@ export interface Match {
 
 export interface TournamentWithDetails extends Tournament {
   participants: Participant[];
+}
+
+export interface Profile {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Friend {
+  profileId: string;
+  nickname: string | null;
+  email: string | null;
+  addedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  tournamentId: string;
+  authorId: string;
+  authorNickname: string | null;
+  content: string;
+  createdAt: string;
 }
 
 export interface CreateIdeaInput {
