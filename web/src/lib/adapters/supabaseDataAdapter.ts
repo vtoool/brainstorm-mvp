@@ -778,15 +778,25 @@ export function getSupabaseDataPort(): DataPort {
       if (error) {
         throw new Error(error.message);
       }
-      return (data ?? []).map((row) => {
-        const cast = row as FriendRow & { friend: ProfileRow | null };
-        if (cast.friend) {
-          const mapped = mapProfileRow(cast.friend);
-          cacheProfile(mapped);
-        }
-        return mapFriendRow(cast);
-      });
-    },
+return (data ?? []).map((row) => {
+   // Supabase may return the embedded relation as an array; normalize it.
+   type FriendRowWithEmbed = FriendRow & {
+     friend: ProfileRow | ProfileRow[] | null | undefined;
+   };
+   const cast = row as unknown as FriendRowWithEmbed;
+  const friend: ProfileRow | null = Array.isArray(cast.friend)
+    ? cast.friend?.[0] ?? null
+    : cast.friend ?? null;
+
+   if (friend) {
+     const mapped = mapProfileRow(friend);
+     cacheProfile(mapped);
+   }
+
+   return { ...(cast as FriendRow), friend } as FriendRow & {
+     friend: ProfileRow | null;
+   };
+ });
 
     async addFriend(profileId: string) {
       const {
