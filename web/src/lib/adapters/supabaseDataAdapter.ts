@@ -2,14 +2,17 @@
 
 import { generateBracket, recordWinner } from "@/lib/bracket/generate";
 import type {
+  ChatMessage,
   CreateIdeaFolderInput,
   CreateIdeaInput,
   CreateTournamentInput,
+  Friend,
   Idea,
   IdeaFolder,
   Match,
   MatchWinnerSide,
   Participant,
+  Profile,
   Tournament,
   TournamentWithDetails,
   UpdateTournamentMetaInput,
@@ -73,9 +76,33 @@ interface MatchRow {
   winner_participant_id: string | null;
 }
 
+interface ProfileRow {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface FriendRow {
+  friend_id: string;
+  created_at: string;
+  friend?: ProfileRow | null;
+}
+
+interface ChatRow {
+  id: string;
+  tournament_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+  author?: { nickname: string | null } | null;
+}
+
 type MatchIdMap = Map<string, Map<string, string>>;
 
 const matchIdsByTournament: MatchIdMap = new Map();
+const profileCache = new Map<string, Profile>();
 
 function mapIdea(row: IdeaRow): Idea {
   return {
@@ -128,6 +155,7 @@ function toTournament(row: TournamentRow, participantsCount: number): Tournament
   const sizeSuggestion = computeSizeSuggestion(participantsCount, row.size_suggestion ?? null);
   return {
     id: row.id,
+    ownerId: row.owner,
     name: row.name,
     visibility: row.visibility,
     status: row.status,
@@ -207,6 +235,64 @@ function toDomainMatch(row: MatchRow): Match {
     },
     winnerSide,
   };
+}
+
+function mapProfileRow(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    email: row.email,
+    nickname: row.nickname,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
+  };
+}
+
+function mapFriendRow(row: FriendRow): Friend {
+  return {
+    profileId: row.friend_id,
+    nickname: row.friend?.nickname ?? null,
+    email: row.friend?.email ?? null,
+    addedAt: row.created_at,
+  };
+}
+
+function mapChatRow(row: ChatRow): ChatMessage {
+  return {
+    id: row.id,
+    tournamentId: row.tournament_id,
+    authorId: row.author_id,
+    authorNickname: row.author?.nickname ?? null,
+    content: row.content,
+    createdAt: row.created_at,
+  };
+}
+
+async function fetchProfileById(supabase: SupabaseClient, id: string): Promise<Profile> {
+  if (profileCache.has(id)) {
+    return profileCache.get(id)!;
+  }
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id,email,nickname,created_at,updated_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Profile not found.");
+  }
+  const mapped = mapProfileRow(data as ProfileRow);
+  profileCache.set(id, mapped);
+  return mapped;
+}
+
+function cacheProfile(profile: Profile) {
+  profileCache.set(profile.id, profile);
+}
+
+function invalidateProfile(id: string) {
+  profileCache.delete(id);
 }
 
 async function ensureProfile(supabase: SupabaseClient, user: User | null) {
@@ -400,7 +486,7 @@ export function getSupabaseDataPort(): DataPort {
     async listTournaments() {
       const { data, error } = await supabase
         .from("tournaments")
-        .select("id,name,visibility,status,created_at,room_code,size_suggestion,tournament_participants(id)")
+        .select("id,owner,name,visibility,status,created_at,room_code,size_suggestion,tournament_participants(id)")
         .order("created_at", { ascending: false });
       if (error) {
         throw new Error(error.message);
@@ -556,6 +642,14 @@ export function getSupabaseDataPort(): DataPort {
       return await this.getTournament(id);
     },
 
+    async deleteTournament(id: string) {
+      const { error } = await supabase.from("tournaments").delete().eq("id", id);
+      if (error) {
+        throw new Error(error.message);
+      }
+      matchIdsByTournament.delete(id);
+    },
+
     async getParticipants(tournamentId: string) {
       return await fetchParticipants(supabase, tournamentId);
     },
@@ -613,6 +707,328 @@ export function getSupabaseDataPort(): DataPort {
       const bracket = generateBracket(participants, { shuffle: false });
       await ensureMatchMappingLoaded(supabase, tournamentId);
       return await this.saveBracket(tournamentId, bracket);
+    },
+
+    async getProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await ensureProfile(supabase, user);
+      if (!user) {
+        throw new Error("You need to sign in to view your profile.");
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,email,nickname,created_at,updated_at")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (!data) {
+        throw new Error("Profile not found.");
+      }
+      const profile = mapProfileRow(data as ProfileRow);
+      cacheProfile(profile);
+      return profile;
+    },
+
+    async updateProfileNickname(nickname: string) {
+      const trimmed = nickname.trim();
+      if (trimmed.length < 2) {
+        throw new Error("Nickname must be at least two characters long.");
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await ensureProfile(supabase, user);
+      if (!user) {
+        throw new Error("You need to sign in to update your nickname.");
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({ nickname: trimmed })
+        .eq("id", user.id)
+        .select("id,email,nickname,created_at,updated_at")
+        .single();
+      if (error) {
+        if (error.code === "23505") {
+          throw new Error("That nickname is already taken.");
+        }
+        throw new Error(error.message);
+      }
+      const profile = mapProfileRow(data as ProfileRow);
+      cacheProfile(profile);
+      return profile;
+    },
+
+    async listFriends() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await ensureProfile(supabase, user);
+      if (!user) {
+        throw new Error("You need to sign in to view friends.");
+      }
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("friend_id,created_at,friend:profiles!friendships_friend_id_fkey(id,email,nickname,created_at,updated_at)")
+        .eq("owner", user.id)
+        .order("created_at", { ascending: true });
+      if (error) {
+        throw new Error(error.message);
+      }
+return (data ?? []).map((row) => {
+  // Normalize embed to a single profile
+  type FriendRowWithEmbed = FriendRow & {
+    friend: ProfileRow | ProfileRow[] | null | undefined;
+  };
+  const cast = row as unknown as FriendRowWithEmbed;
+  const friend: ProfileRow | null = Array.isArray(cast.friend)
+    ? cast.friend?.[0] ?? null
+    : cast.friend ?? null;
+
+  if (friend) {
+    cacheProfile(mapProfileRow(friend));
+  }
+
+  // Map to domain Friend
+  return mapFriendRow({
+    friend_id: cast.friend_id,
+    created_at: cast.created_at,
+    friend,
+  } as FriendRow);
+});
+}, // <— this closes listFriends() and separates it from the next method
+
+
+ addFriend: async (profileId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+      await ensureProfile(supabase, user);
+      if (!user) {
+        throw new Error("You need to sign in to add friends.");
+      }
+      if (!profileId) {
+        throw new Error("Select someone to add as a friend.");
+      }
+      if (profileId === user.id) {
+        throw new Error("You can’t add yourself as a friend.");
+      }
+      const targetProfile = await fetchProfileById(supabase, profileId);
+      const { error } = await supabase
+        .from("friendships")
+        .upsert({ owner: user.id, friend_id: profileId }, { onConflict: "owner,friend_id" });
+      if (error && error.code !== "23505") {
+        throw new Error(error.message);
+      }
+      const { data, error: fetchError } = await supabase
+        .from("friendships")
+        .select("friend_id,created_at,friend:profiles!friendships_friend_id_fkey(id,email,nickname,created_at,updated_at)")
+        .eq("owner", user.id)
+        .eq("friend_id", profileId)
+        .maybeSingle();
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+type FriendRowWithEmbed = FriendRow & {
+  friend: ProfileRow | ProfileRow[] | null | undefined;
+};
+
+const fetched = (data as unknown as FriendRowWithEmbed) ?? null;
+
+// Normalize the embedded profile to a single object
+const normalized: FriendRow = fetched
+  ? {
+      friend_id: fetched.friend_id,
+      created_at: fetched.created_at,
+      friend: Array.isArray(fetched.friend)
+        ? fetched.friend?.[0] ?? null
+        : fetched.friend ?? null,
+    }
+  : {
+      friend_id: profileId,
+      created_at: new Date().toISOString(),
+      friend: {
+        id: targetProfile.id,
+        email: targetProfile.email,
+        nickname: targetProfile.nickname,
+        created_at: targetProfile.createdAt,
+        updated_at: targetProfile.updatedAt,
+      },
+    };
+
+// Cache whichever profile we have
+if (normalized.friend) {
+  cacheProfile(mapProfileRow(normalized.friend));
+}
+
+return mapFriendRow(normalized);
+
+    },
+
+    async removeFriend(profileId: string) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await ensureProfile(supabase, user);
+      if (!user) {
+        throw new Error("You need to sign in to manage friends.");
+      }
+      const { error } = await supabase
+        .from("friendships")
+        .delete()
+        .eq("owner", user.id)
+        .eq("friend_id", profileId);
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+
+    async searchProfiles(query: string) {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        return [];
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,email,nickname,created_at,updated_at")
+        .ilike("nickname", `%${trimmed}%`)
+        .order("nickname", { ascending: true })
+        .limit(10);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? [])
+        .filter((row) => (row as ProfileRow).nickname)
+        .map((row) => {
+          const profile = mapProfileRow(row as ProfileRow);
+          cacheProfile(profile);
+          return profile;
+        });
+    },
+
+    async listChatMessages(tournamentId: string) {
+      const { data, error } = await supabase
+        .from("tournament_messages")
+        .select("id,tournament_id,author_id,content,created_at,author:profiles!tournament_messages_author_id_fkey(nickname)")
+        .eq("tournament_id", tournamentId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      if (error) {
+        throw new Error(error.message);
+      }
+return (data ?? []).map((row) => {
+  type ChatRowWithEmbed = ChatRow & {
+    author: { nickname: string | null } | { nickname: string | null }[] | null | undefined;
+  };
+  const cast = row as unknown as ChatRowWithEmbed;
+  const author = Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+  return mapChatRow({ ...cast, author } as ChatRow);
+});
+    },
+
+async sendChatMessage(tournamentId: string, content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Message cannot be empty.");
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await ensureProfile(supabase, user);
+  if (!user) {
+    throw new Error("You need to sign in to chat.");
+  }
+  const profile = await fetchProfileById(supabase, user.id);
+  if (!profile.nickname || profile.nickname.trim().length < 2) {
+    throw new Error("Set a nickname in settings before chatting.");
+  }
+
+  const { data, error } = await supabase
+    .from("tournament_messages")
+    .insert({ tournament_id: tournamentId, author_id: user.id, content: trimmed })
+    .select(
+      "id,tournament_id,author_id,content,created_at,author:profiles!tournament_messages_author_id_fkey(nickname)"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Supabase may return the 'author' embed as an array; normalize to a single object
+  type ChatRowWithEmbed = {
+    id: string;
+    tournament_id: string;
+    author_id: string;
+    content: string;
+    created_at: string;
+    author?: { nickname: string | null } | { nickname: string | null }[] | null;
+  };
+  const cast = data as unknown as ChatRowWithEmbed;
+  const author =
+    Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+
+  const mapped = mapChatRow({
+    id: cast.id,
+    tournament_id: cast.tournament_id,
+    author_id: cast.author_id,
+    content: cast.content,
+    created_at: cast.created_at,
+    author,
+  } as ChatRow);
+
+  cacheProfile(profile);
+  return mapped;
+},
+
+    subscribeToChatMessages(tournamentId: string, handler: (message: ChatMessage) => void) {
+      const channel = supabase
+        .channel(`tournament-chat:${tournamentId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "tournament_messages",
+            filter: `tournament_id=eq.${tournamentId}`,
+          },
+          (payload) => {
+            const inserted = payload.new as {
+              id: string;
+              tournament_id: string;
+              author_id: string;
+              content: string;
+              created_at: string;
+            };
+            void (async () => {
+              try {
+                const profile = await fetchProfileById(supabase, inserted.author_id);
+                handler({
+                  id: inserted.id,
+                  tournamentId: inserted.tournament_id,
+                  authorId: inserted.author_id,
+                  authorNickname: profile.nickname,
+                  content: inserted.content,
+                  createdAt: inserted.created_at,
+                });
+              } catch {
+                handler({
+                  id: inserted.id,
+                  tournamentId: inserted.tournament_id,
+                  authorId: inserted.author_id,
+                  authorNickname: null,
+                  content: inserted.content,
+                  createdAt: inserted.created_at,
+                });
+              }
+            })();
+          },
+        )
+        .subscribe();
+      return () => {
+        void channel.unsubscribe();
+      };
     },
   } satisfies DataPort;
 }
