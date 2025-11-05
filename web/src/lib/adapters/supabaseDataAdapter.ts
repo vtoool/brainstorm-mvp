@@ -927,41 +927,60 @@ return (data ?? []).map((row) => {
 });
     },
 
-    async sendChatMessage(tournamentId: string, content: string) {
-      const trimmed = content.trim();
-      if (!trimmed) {
-        throw new Error("Message cannot be empty.");
-      }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await ensureProfile(supabase, user);
-      if (!user) {
-        throw new Error("You need to sign in to chat.");
-      }
-      const profile = await fetchProfileById(supabase, user.id);
-      if (!profile.nickname || profile.nickname.trim().length < 2) {
-        throw new Error("Set a nickname in settings before chatting.");
-      }
-      const { data, error } = await supabase
-        .from("tournament_messages")
-        .insert({ tournament_id: tournamentId, author_id: user.id, content: trimmed })
-        .select("id,tournament_id,author_id,content,created_at,author:profiles!tournament_messages_author_id_fkey(nickname)")
-        .single();
-      if (error) {
-        throw new Error(error.message);
-      }
-type ChatRowWithEmbed = ChatRow & {
-  author: { nickname: string | null } | { nickname: string | null }[] | null | undefined;
-};
-const cast = data as unknown as ChatRowWithEmbed;
-const author = Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+async sendChatMessage(tournamentId: string, content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Message cannot be empty.");
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  await ensureProfile(supabase, user);
+  if (!user) {
+    throw new Error("You need to sign in to chat.");
+  }
+  const profile = await fetchProfileById(supabase, user.id);
+  if (!profile.nickname || profile.nickname.trim().length < 2) {
+    throw new Error("Set a nickname in settings before chatting.");
+  }
 
-const mapped = mapChatRow({ ...cast, author } as ChatRow);
-cacheProfile(profile);
-return mapped;
+  const { data, error } = await supabase
+    .from("tournament_messages")
+    .insert({ tournament_id: tournamentId, author_id: user.id, content: trimmed })
+    .select(
+      "id,tournament_id,author_id,content,created_at,author:profiles!tournament_messages_author_id_fkey(nickname)"
+    )
+    .single();
 
-    },
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Supabase may return the 'author' embed as an array; normalize to a single object
+  type ChatRowWithEmbed = {
+    id: string;
+    tournament_id: string;
+    author_id: string;
+    content: string;
+    created_at: string;
+    author?: { nickname: string | null } | { nickname: string | null }[] | null;
+  };
+  const cast = data as unknown as ChatRowWithEmbed;
+  const author =
+    Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+
+  const mapped = mapChatRow({
+    id: cast.id,
+    tournament_id: cast.tournament_id,
+    author_id: cast.author_id,
+    content: cast.content,
+    created_at: cast.created_at,
+    author,
+  } as ChatRow);
+
+  cacheProfile(profile);
+  return mapped;
+},
 
     subscribeToChatMessages(tournamentId: string, handler: (message: ChatMessage) => void) {
       const channel = supabase
