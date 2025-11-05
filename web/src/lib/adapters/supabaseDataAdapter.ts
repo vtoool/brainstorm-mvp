@@ -779,29 +779,31 @@ export function getSupabaseDataPort(): DataPort {
         throw new Error(error.message);
       }
 return (data ?? []).map((row) => {
-   // Supabase may return the embedded relation as an array; normalize it.
-   type FriendRowWithEmbed = FriendRow & {
-     friend: ProfileRow | ProfileRow[] | null | undefined;
-   };
-   const cast = row as unknown as FriendRowWithEmbed;
+  // Normalize embed to a single profile
+  type FriendRowWithEmbed = FriendRow & {
+    friend: ProfileRow | ProfileRow[] | null | undefined;
+  };
+  const cast = row as unknown as FriendRowWithEmbed;
   const friend: ProfileRow | null = Array.isArray(cast.friend)
     ? cast.friend?.[0] ?? null
     : cast.friend ?? null;
 
-   if (friend) {
-     const mapped = mapProfileRow(friend);
-     cacheProfile(mapped);
-   }
+  if (friend) {
+    cacheProfile(mapProfileRow(friend));
+  }
 
-   return { ...(cast as FriendRow), friend } as FriendRow & {
-     friend: ProfileRow | null;
-   };
- });
+  // Map to domain Friend
+  return mapFriendRow({
+    friend_id: cast.friend_id,
+    created_at: cast.created_at,
+    friend,
+  } as FriendRow);
+});
+}, // <— this closes listFriends() and separates it from the next method
 
-    async addFriend(profileId: string) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+
+ addFriend: async (profileId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
       await ensureProfile(supabase, user);
       if (!user) {
         throw new Error("You need to sign in to add friends.");
