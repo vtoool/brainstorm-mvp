@@ -830,19 +830,40 @@ return (data ?? []).map((row) => {
       if (fetchError) {
         throw new Error(fetchError.message);
       }
-      const cast = (data as FriendRow & { friend: ProfileRow | null }) ?? {
-        friend_id: profileId,
-        created_at: new Date().toISOString(),
-        friend: {
-          id: targetProfile.id,
-          email: targetProfile.email,
-          nickname: targetProfile.nickname,
-          created_at: targetProfile.createdAt,
-          updated_at: targetProfile.updatedAt,
-        },
-      };
-      cacheProfile(targetProfile);
-      return mapFriendRow(cast);
+type FriendRowWithEmbed = FriendRow & {
+  friend: ProfileRow | ProfileRow[] | null | undefined;
+};
+
+const fetched = (data as unknown as FriendRowWithEmbed) ?? null;
+
+// Normalize the embedded profile to a single object
+const normalized: FriendRow = fetched
+  ? {
+      friend_id: fetched.friend_id,
+      created_at: fetched.created_at,
+      friend: Array.isArray(fetched.friend)
+        ? fetched.friend?.[0] ?? null
+        : fetched.friend ?? null,
+    }
+  : {
+      friend_id: profileId,
+      created_at: new Date().toISOString(),
+      friend: {
+        id: targetProfile.id,
+        email: targetProfile.email,
+        nickname: targetProfile.nickname,
+        created_at: targetProfile.createdAt,
+        updated_at: targetProfile.updatedAt,
+      },
+    };
+
+// Cache whichever profile we have
+if (normalized.friend) {
+  cacheProfile(mapProfileRow(normalized.friend));
+}
+
+return mapFriendRow(normalized);
+
     },
 
     async removeFriend(profileId: string) {
