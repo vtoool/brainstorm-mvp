@@ -917,7 +917,14 @@ return mapFriendRow(normalized);
       if (error) {
         throw new Error(error.message);
       }
-      return (data ?? []).map((row) => mapChatRow(row as ChatRow));
+return (data ?? []).map((row) => {
+  type ChatRowWithEmbed = ChatRow & {
+    author: { nickname: string | null } | { nickname: string | null }[] | null | undefined;
+  };
+  const cast = row as unknown as ChatRowWithEmbed;
+  const author = Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+  return mapChatRow({ ...cast, author } as ChatRow);
+});
     },
 
     async sendChatMessage(tournamentId: string, content: string) {
@@ -944,9 +951,16 @@ return mapFriendRow(normalized);
       if (error) {
         throw new Error(error.message);
       }
-      const mapped = mapChatRow(data as ChatRow);
-      cacheProfile(profile);
-      return mapped;
+type ChatRowWithEmbed = ChatRow & {
+  author: { nickname: string | null } | { nickname: string | null }[] | null | undefined;
+};
+const cast = data as unknown as ChatRowWithEmbed;
+const author = Array.isArray(cast.author) ? cast.author?.[0] ?? null : cast.author ?? null;
+
+const mapped = mapChatRow({ ...cast, author } as ChatRow);
+cacheProfile(profile);
+return mapped;
+
     },
 
     subscribeToChatMessages(tournamentId: string, handler: (message: ChatMessage) => void) {
